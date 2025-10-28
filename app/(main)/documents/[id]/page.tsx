@@ -11,6 +11,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { AnswerCompareGrid } from '@/components/answer-compare-grid';
 import { TranslateDialog } from '@/components/translate-dialog';
+import { ImproveButton } from '@/components/improve-button';
+import { UpdateNormsButton } from '@/components/update-norms-button';
 import { toast } from 'sonner';
 import {
   FileText,
@@ -227,7 +229,11 @@ export default function DocumentPage() {
             <Badge variant="secondary">{document.chunksCount} chunks</Badge>
           </div>
         </div>
-        <TranslateDialog documentId={documentId} documentTitle={document.title} />
+        <div className="flex gap-2">
+          <ImproveButton documentId={documentId} documentTitle={document.title} />
+          <UpdateNormsButton documentId={documentId} documentTitle={document.title} />
+          <TranslateDialog documentId={documentId} documentTitle={document.title} />
+        </div>
       </div>
 
       {translations.length > 0 && (
