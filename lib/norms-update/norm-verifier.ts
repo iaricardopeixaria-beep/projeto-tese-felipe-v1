@@ -171,7 +171,7 @@ Retorne APENAS JSON válido no formato:
   } else {
     // Gemini com Google Search (grounding)
     // Força uso de modelo compatível com grounding
-    const groundingModel = model === 'gemini-flash-latest' ? 'gemini-1.5-flash' : model;
+    const groundingModel = model === 'gemini-flash-latest' ? 'gemini-2.5-flash' : model;
     console.log(`[NORMS] Initializing Gemini with model: ${groundingModel} (original: ${model})`);
 
     try {
