@@ -140,7 +140,11 @@ IMPORTANTE:
 - Se não tiver certeza, marque como "desconhecido"
 - URL oficial da fonte (se disponível)
 
-Retorne APENAS JSON válido no formato:
+FORMATO DA RESPOSTA:
+Retorne APENAS um objeto JSON válido, sem markdown, sem explicações, sem texto adicional.
+Comece sua resposta com { e termine com }
+
+JSON:
 {
   "status": "vigente|alterada|revogada|substituida|desconhecido",
   "updatedNumber": "número da versão atualizada (se houver)",
@@ -207,12 +211,18 @@ Retorne APENAS JSON válido no formato:
     }
   }
 
-  // Parse JSON
+  // Parse JSON - tenta múltiplas estratégias
   console.log(`[NORMS] Parsing JSON response for ${reference.number}...`);
-  const jsonMatch = response.match(/\{[\s\S]*\}/);
+
+  // Estratégia 1: Remove markdown code blocks (```json ... ```)
+  let cleanedResponse = response.replace(/```json\s*/g, '').replace(/```\s*/g, '');
+
+  // Estratégia 2: Procura por { ... } no texto
+  const jsonMatch = cleanedResponse.match(/\{[\s\S]*\}/);
 
   if (!jsonMatch) {
-    console.warn(`[NORMS] No JSON found in response for ${reference.number}. Raw response:`, response);
+    console.warn(`[NORMS] No JSON found in response for ${reference.number}.`);
+    console.warn(`[NORMS] Raw response (first 500 chars):`, response.substring(0, 500));
     return {
       status: 'desconhecido',
       updateType: 'manual',
@@ -221,8 +231,20 @@ Retorne APENAS JSON válido no formato:
     };
   }
 
-  const parsed = JSON.parse(jsonMatch[0]);
-  console.log(`[NORMS] Parsed JSON for ${reference.number}:`, parsed);
+  let parsed;
+  try {
+    parsed = JSON.parse(jsonMatch[0]);
+    console.log(`[NORMS] Parsed JSON for ${reference.number}:`, parsed);
+  } catch (parseError: any) {
+    console.error(`[NORMS] JSON parse error for ${reference.number}:`, parseError.message);
+    console.error(`[NORMS] JSON string attempted:`, jsonMatch[0].substring(0, 200));
+    return {
+      status: 'desconhecido',
+      updateType: 'manual',
+      updateDescription: 'Erro ao fazer parse do JSON retornado pela IA',
+      isPaid
+    };
+  }
 
   const result = {
     status: parsed.status as NormStatus || 'desconhecido',
