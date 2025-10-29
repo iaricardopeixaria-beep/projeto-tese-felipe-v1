@@ -104,6 +104,18 @@ Retorne APENAS o JSON.`;
         });
 
         const result = await geminiModel.generateContent(prompt);
+
+        // Debug: Verifica se há bloqueios ou problemas
+        const candidate = result.response.candidates?.[0];
+        if (candidate?.finishReason && candidate.finishReason !== 'STOP') {
+          errors.push({
+            batch: Math.floor(i / batchSize) + 1,
+            type: 'GEMINI_BLOCKED',
+            details: `finishReason: ${candidate.finishReason}\nfullResponse: ${JSON.stringify(result.response, null, 2)}`
+          });
+          continue;
+        }
+
         response = result.response.text().trim();
       }
 
