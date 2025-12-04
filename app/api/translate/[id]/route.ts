@@ -37,13 +37,15 @@ export async function POST(
       sourceLanguage,
       provider,
       model,
-      maxPages
+      maxPages,
+      sourceDocumentPath // Optional: for pipeline usage
     }: {
       targetLanguage: SupportedLanguage;
       sourceLanguage?: SupportedLanguage;
       provider: AIProvider;
       model: string;
       maxPages?: number;
+      sourceDocumentPath?: string;
     } = body;
 
     if (!targetLanguage || !provider || !model) {
@@ -76,7 +78,7 @@ export async function POST(
     }
 
     // Executa tradução em background
-    executeTranslation(jobId, documentId, doc, targetLanguage, sourceLanguage, provider, model, maxPages);
+    executeTranslation(jobId, documentId, doc, targetLanguage, sourceLanguage, provider, model, maxPages, sourceDocumentPath);
 
     return NextResponse.json({
       jobId,
@@ -102,26 +104,32 @@ async function executeTranslation(
   sourceLanguage: SupportedLanguage | undefined,
   provider: AIProvider,
   model: string,
-  maxPages?: number
+  maxPages?: number,
+  sourceDocumentPath?: string
 ) {
   const tempDir = os.tmpdir();
-  const tempInputPath = path.join(tempDir, `${documentId}_input.docx`);
+  const tempInputPath = sourceDocumentPath || path.join(tempDir, `${documentId}_input.docx`);
   const tempOutputPath = path.join(tempDir, `${documentId}_output_${targetLanguage}.docx`);
 
   try {
-    // 1. Download arquivo original do Storage
-    console.log('[TRANSLATE] Downloading original from Storage:', doc.file_path);
-    const { data: fileBlob, error: downloadError } = await supabase.storage
-      .from('documents')
-      .download(doc.file_path);
+    if (!sourceDocumentPath) {
+      // Standalone mode - download from Storage
+      console.log('[TRANSLATE] Downloading original from Storage:', doc.file_path);
+      const { data: fileBlob, error: downloadError } = await supabase.storage
+        .from('documents')
+        .download(doc.file_path);
 
-    if (downloadError || !fileBlob) {
-      throw new Error(`Failed to download: ${downloadError?.message}`);
+      if (downloadError || !fileBlob) {
+        throw new Error(`Failed to download: ${downloadError?.message}`);
+      }
+
+      // Salva temporariamente para processar
+      const buffer = Buffer.from(await fileBlob.arrayBuffer());
+      await fs.writeFile(tempInputPath, buffer);
+    } else {
+      // Pipeline mode - use provided path
+      console.log('[TRANSLATE] Using source document from pipeline:', sourceDocumentPath);
     }
-
-    // Salva temporariamente para processar
-    const buffer = Buffer.from(await fileBlob.arrayBuffer());
-    await fs.writeFile(tempInputPath, buffer);
 
     // 2. Traduz documento
     const options: TranslationOptions = {

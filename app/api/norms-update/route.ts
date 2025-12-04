@@ -12,11 +12,16 @@ import { NormReference } from '@/lib/norms-update/types';
 // POST /api/norms-update - Inicia análise de normas
 export async function POST(req: NextRequest) {
   try {
-    const { documentId, provider = 'gemini', model = 'gemini-2.5-flash' } = await req.json();
+    const {
+      documentId,
+      provider = 'gemini',
+      model = 'gemini-2.5-flash',
+      sourceDocumentPath // Optional: for pipeline usage
+    } = await req.json();
 
-    if (!documentId) {
+    if (!documentId && !sourceDocumentPath) {
       return NextResponse.json(
-        { error: 'Document ID is required' },
+        { error: 'Document ID or sourceDocumentPath is required' },
         { status: 400 }
       );
     }
@@ -64,7 +69,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Inicia processamento em background
-    processNormsUpdate(jobId, doc, provider, model).catch(err => {
+    processNormsUpdate(jobId, doc, provider, model, sourceDocumentPath).catch(err => {
       console.error('[NORMS] Background processing error:', err);
     });
 
@@ -86,7 +91,8 @@ async function processNormsUpdate(
   jobId: string,
   doc: any,
   provider: 'openai' | 'gemini',
-  model: string
+  model: string,
+  sourceDocumentPath?: string
 ) {
   try {
     // Atualiza status para analyzing
@@ -100,19 +106,27 @@ async function processNormsUpdate(
 
     console.log(`[NORMS] Starting analysis for job ${jobId}`);
 
-    // Download arquivo
-    const { data: fileBlob, error: downloadError } = await supabase.storage
-      .from('documents')
-      .download(doc.file_path);
+    let tempFilePath: string;
 
-    if (downloadError || !fileBlob) {
-      throw new Error(`Failed to download: ${downloadError?.message}`);
+    if (sourceDocumentPath) {
+      // Pipeline mode - use provided path
+      console.log(`[NORMS] Using source document from pipeline: ${sourceDocumentPath}`);
+      tempFilePath = sourceDocumentPath;
+    } else {
+      // Standalone mode - download from Storage
+      const { data: fileBlob, error: downloadError } = await supabase.storage
+        .from('documents')
+        .download(doc.file_path);
+
+      if (downloadError || !fileBlob) {
+        throw new Error(`Failed to download: ${downloadError?.message}`);
+      }
+
+      const tempDir = os.tmpdir();
+      tempFilePath = path.join(tempDir, `${doc.id}_norms.docx`);
+      const buffer = Buffer.from(await fileBlob.arrayBuffer());
+      await fs.writeFile(tempFilePath, buffer);
     }
-
-    const tempDir = os.tmpdir();
-    const tempFilePath = path.join(tempDir, `${doc.id}_norms.docx`);
-    const buffer = Buffer.from(await fileBlob.arrayBuffer());
-    await fs.writeFile(tempFilePath, buffer);
 
     // Extrai estrutura do documento
     console.log('[NORMS] Extracting document structure...');

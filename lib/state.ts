@@ -1,5 +1,6 @@
 import elasticlunr from 'elasticlunr';
 import { TranslationProgress } from './translation/types';
+import type { Thesis, Chapter, ChapterVersion, ChapterChunk } from './thesis/types';
 
 export type Chunk = {
   ix: number;
@@ -35,6 +36,32 @@ export type Project = {
   updatedAt: Date;
 };
 
+// ============================================================================
+// THESIS SYSTEM TYPES (In-Memory)
+// ============================================================================
+
+/**
+ * In-memory thesis with cached chapters
+ */
+export type ThesisInMemory = Thesis & {
+  chapters?: Chapter[]; // Cached chapters (loaded on-demand)
+};
+
+/**
+ * In-memory chapter version with loaded chunks and index
+ */
+export type ChapterVersionInMemory = {
+  id: string;
+  chapter_id: string;
+  version_number: number;
+  file_path: string;
+  pages: number | null;
+  chunks: ChapterChunk[]; // Loaded chunks
+  index: elasticlunr.Index<any>; // BM25 index for search
+  metadata: Record<string, any>;
+  created_at: string;
+};
+
 export type Settings = {
   openaiKey: string;
   googleKey: string;
@@ -58,6 +85,8 @@ const globalForState = globalThis as unknown as {
     docs: Map<string, InMemoryDoc>;
     translations: Map<string, TranslationJob>;
     projects: Map<string, Project>;
+    theses: Map<string, ThesisInMemory>;
+    chapterVersions: Map<string, ChapterVersionInMemory>;
     settings: Settings;
   };
 };
@@ -67,11 +96,15 @@ export const state: {
   docs: Map<string, InMemoryDoc>;
   translations: Map<string, TranslationJob>;
   projects: Map<string, Project>;
+  theses: Map<string, ThesisInMemory>;
+  chapterVersions: Map<string, ChapterVersionInMemory>;
   settings: Settings;
 } = globalForState.__appState ?? {
   docs: new Map(),
   translations: new Map(),
   projects: new Map(),
+  theses: new Map(),
+  chapterVersions: new Map(),
   settings: {
     openaiKey: process.env.OPENAI_API_KEY ?? "",
     googleKey: process.env.GOOGLE_API_KEY ?? "",

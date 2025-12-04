@@ -1,0 +1,116 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { createOperationJob, executeAdaptOperation } from '@/lib/thesis/chapter-operations';
+import { AIProvider } from '@/lib/ai/types';
+import { supabase } from '@/lib/supabase';
+
+type ReferenceInput = {
+  type: 'link' | 'file';
+  title: string;
+  description?: string;
+  url?: string;
+  filePath?: string;
+  fileName?: string;
+  fileSize?: number;
+  mimeType?: string;
+};
+
+export async function POST(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id: chapterId } = await params;
+    const body = await req.json();
+    const {
+      versionId,
+      style = 'simplified',
+      targetAudience,
+      provider = 'openai',
+      model = 'gpt-4o-mini',
+      references = []
+    }: {
+      versionId: string;
+      style?: 'academic' | 'professional' | 'simplified' | 'custom';
+      targetAudience?: string;
+      provider?: AIProvider;
+      model?: string;
+      references?: ReferenceInput[];
+    } = body;
+
+    if (!versionId) {
+      return NextResponse.json(
+        { error: 'Missing required field: versionId' },
+        { status: 400 }
+      );
+    }
+
+    if (style === 'custom' && !targetAudience) {
+      return NextResponse.json(
+        { error: 'Target audience is required when style is custom' },
+        { status: 400 }
+      );
+    }
+
+    console.log(`[CHAPTER-ADAPT-API] Starting adapt for chapter ${chapterId}, version ${versionId}`);
+    console.log(`[CHAPTER-ADAPT-API] Style: ${style}, Target audience: ${targetAudience || 'general'}`);
+    console.log(`[CHAPTER-ADAPT-API] References provided: ${references.length}`);
+
+    // Cria job
+    const jobId = await createOperationJob(chapterId, versionId, 'adapt');
+
+    // Store references in database
+    if (references.length > 0) {
+      const referencesToInsert = references.map(ref => ({
+        job_id: jobId,
+        reference_type: ref.type,
+        reference_content: ref.type === 'link' ? ref.url : ref.filePath,
+        title: ref.title,
+        description: ref.description || null,
+        file_name: ref.fileName || null,
+        file_size: ref.fileSize || null,
+        mime_type: ref.mimeType || null,
+      }));
+
+      const { error: refError } = await supabase
+        .from('operation_references')
+        .insert(referencesToInsert);
+
+      if (refError) {
+        console.error('[CHAPTER-ADAPT-API] Error storing references:', refError);
+      } else {
+        console.log(`[CHAPTER-ADAPT-API] Stored ${references.length} references`);
+      }
+    }
+
+    // Executa em background
+    executeAdaptOperation(
+      jobId,
+      chapterId,
+      versionId,
+      style,
+      targetAudience,
+      provider,
+      model,
+      references
+    ).catch(err => {
+      console.error('[CHAPTER-ADAPT-API] Background error:', err);
+    });
+
+    return NextResponse.json({
+      jobId,
+      message: 'Adapt operation started',
+      chapterId,
+      versionId,
+      style,
+      targetAudience,
+      referencesCount: references.length
+    });
+
+  } catch (error: any) {
+    console.error('[CHAPTER-ADAPT-API] Error:', error);
+    return NextResponse.json(
+      { error: error.message },
+      { status: 500 }
+    );
+  }
+}

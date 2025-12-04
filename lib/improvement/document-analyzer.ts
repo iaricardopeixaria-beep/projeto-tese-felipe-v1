@@ -176,7 +176,8 @@ export async function generateGlobalContext(
   structure: DocumentStructure,
   provider: 'openai' | 'gemini',
   model: string,
-  apiKey: string
+  apiKey: string,
+  referencesContext: string = ''
 ): Promise<GlobalContext> {
   // Pega primeiras páginas (até 3000 chars) + índice (títulos dos capítulos)
   const initialText = paragraphs
@@ -225,6 +226,7 @@ ${i + 1}. ${ch.title}
 ${ch.preview}
 ---
 `).join('\n')}
+${referencesContext ? `\n${referencesContext}` : ''}
 
 Retorne APENAS um JSON válido no formato:
 {

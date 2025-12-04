@@ -7,12 +7,9 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { AnswerCompareGrid } from '@/components/answer-compare-grid';
-import { TranslateDialog } from '@/components/translate-dialog';
-import { ImproveButton } from '@/components/improve-button';
-import { UpdateNormsButton } from '@/components/update-norms-button';
+import { PipelineWizard } from '@/components/pipeline-wizard';
 import { toast } from 'sonner';
 import {
   FileText,
@@ -20,10 +17,8 @@ import {
   Loader2,
   Download,
   Languages,
-  Lightbulb,
-  Edit,
-  RefreshCw,
-  ArrowLeft
+  ArrowLeft,
+  Sparkles
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -55,21 +50,22 @@ export default function DocumentPage() {
   const [chatting, setChatting] = useState(false);
   const [answers, setAnswers] = useState<AIResponse[]>([]);
   const [translations, setTranslations] = useState<any[]>([]);
+  const [pipelineSelectorOpen, setPipelineSelectorOpen] = useState(false);
 
   const [settings, setSettings] = useState<any>(null);
-  const [runAll, setRunAll] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState<'openai' | 'gemini' | 'grok'>('openai');
   const [selectedModels, setSelectedModels] = useState({
     openai: '',
     gemini: '',
     grok: ''
   });
-  const [action, setAction] = useState<string | null>(null);
+  const [pipelineJobs, setPipelineJobs] = useState<any[]>([]);
 
   useEffect(() => {
     loadDocument();
     loadSettings();
     loadTranslations();
+    loadPipelineJobs();
   }, [documentId]);
 
   const loadDocument = async () => {
@@ -116,7 +112,19 @@ export default function DocumentPage() {
     }
   };
 
-  const handleChat = async (actionType: string | null = null) => {
+  const loadPipelineJobs = async () => {
+    try {
+      const res = await fetch(`/api/documents/${documentId}/pipelines`);
+      if (res.ok) {
+        const data = await res.json();
+        setPipelineJobs(data.jobs || []);
+      }
+    } catch (error: any) {
+      console.error('Pipeline jobs load error:', error);
+    }
+  };
+
+  const handleChat = async () => {
     if (!question?.trim()) {
       toast.error('Digite uma pergunta');
       return;
@@ -131,15 +139,14 @@ export default function DocumentPage() {
     setAnswers([]);
 
     try {
-      const providers = runAll ? ['openai', 'gemini', 'grok'] : [selectedProvider];
-      const models: any = {};
-      providers.forEach((p) => {
-        const model = selectedModels[p as keyof typeof selectedModels];
-        if (!model) {
-          throw new Error(`Modelo não selecionado para ${p}`);
-        }
-        models[p] = model;
-      });
+      const providers = [selectedProvider];
+      const model = selectedModels[selectedProvider];
+
+      if (!model) {
+        throw new Error(`Modelo não selecionado para ${selectedProvider}`);
+      }
+
+      const models: any = { [selectedProvider]: model };
 
       const res = await fetch('/api/chat', {
         method: 'POST',
@@ -148,8 +155,7 @@ export default function DocumentPage() {
           documentId,
           question,
           providers,
-          models,
-          action: actionType
+          models
         })
       });
 
@@ -229,26 +235,73 @@ export default function DocumentPage() {
             <Badge variant="secondary">{document.chunksCount} chunks</Badge>
           </div>
         </div>
-        <div className="flex gap-2">
-          <ImproveButton documentId={documentId} documentTitle={document.title} />
-          <UpdateNormsButton documentId={documentId} documentTitle={document.title} />
-          <TranslateDialog documentId={documentId} documentTitle={document.title} />
-        </div>
+        <Button
+          onClick={() => setPipelineSelectorOpen(true)}
+          className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white shadow-lg shadow-red-500/20"
+        >
+          <Sparkles className="h-4 w-4 mr-2" />
+          Processar Documento
+        </Button>
       </div>
 
-      {translations.length > 0 && (
+      {(translations.length > 0 || pipelineJobs.length > 0) && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <Languages className="h-5 w-5" />
-              Traduções Disponíveis
+              <Sparkles className="h-5 w-5" />
+              Processamentos & Traduções
             </CardTitle>
             <CardDescription>
-              Clique em uma tradução para visualizar ou baixar
+              Histórico de operações realizadas neste documento
             </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
+              {/* Pipeline Jobs */}
+              {pipelineJobs.map((job) => (
+                <Link
+                  key={job.id}
+                  href={`/pipeline/${job.id}`}
+                  className="block"
+                >
+                  <div className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 transition-colors">
+                    <div className="flex items-center gap-3">
+                      <Sparkles className="h-4 w-4 text-red-500" />
+                      <div>
+                        <p className="font-medium">
+                          Pipeline: {job.selected_operations?.length || 0} operações
+                        </p>
+                        <p className="text-sm text-gray-500">
+                          {new Date(job.created_at).toLocaleString('pt-BR')}
+                        </p>
+                      </div>
+                    </div>
+                    <Badge
+                      className={
+                        job.status === 'completed'
+                          ? 'bg-green-500'
+                          : job.status === 'failed'
+                          ? 'bg-red-500'
+                          : job.status === 'running'
+                          ? 'bg-blue-500'
+                          : 'bg-gray-500'
+                      }
+                    >
+                      {job.status === 'completed'
+                        ? 'Concluído'
+                        : job.status === 'failed'
+                        ? 'Erro'
+                        : job.status === 'running'
+                        ? 'Em andamento'
+                        : job.status === 'awaiting_approval'
+                        ? 'Aguardando aprovação'
+                        : job.status}
+                    </Badge>
+                  </div>
+                </Link>
+              ))}
+
+              {/* Translations */}
               {translations.map((translation) => (
                 <Link
                   key={translation.id}
@@ -257,13 +310,13 @@ export default function DocumentPage() {
                 >
                   <div className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 transition-colors">
                     <div className="flex items-center gap-3">
-                      <FileText className="h-4 w-4 text-gray-500" />
+                      <Languages className="h-4 w-4 text-blue-500" />
                       <div>
                         <p className="font-medium">
-                          {translation.target_language?.toUpperCase() || 'N/A'} - {translation.model}
+                          Tradução: {translation.target_language?.toUpperCase() || 'N/A'}
                         </p>
                         <p className="text-sm text-gray-500">
-                          {new Date(translation.created_at).toLocaleString('pt-BR')}
+                          {translation.model} · {new Date(translation.created_at).toLocaleString('pt-BR')}
                         </p>
                       </div>
                     </div>
@@ -315,7 +368,6 @@ export default function DocumentPage() {
               <Select
                 value={selectedProvider}
                 onValueChange={(v) => setSelectedProvider(v as any)}
-                disabled={runAll}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -335,7 +387,6 @@ export default function DocumentPage() {
                 onValueChange={(v) =>
                   setSelectedModels((prev) => ({ ...prev, [selectedProvider]: v }))
                 }
-                disabled={runAll}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -351,44 +402,7 @@ export default function DocumentPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="runAll"
-              checked={runAll}
-              onChange={(e) => setRunAll(e.target.checked)}
-              className="rounded"
-            />
-            <Label htmlFor="runAll" className="cursor-pointer">
-              Executar nas 3 IAs em paralelo (OpenAI, Gemini, Grok)
-            </Label>
-          </div>
-
-          <Tabs defaultValue="chat" className="w-full">
-            <TabsList className="grid w-full grid-cols-5">
-              <TabsTrigger value="chat" onClick={() => setAction(null)}>
-                Chat
-              </TabsTrigger>
-              <TabsTrigger value="translate" onClick={() => setAction('translate')}>
-                <Languages className="h-4 w-4 mr-1" />
-                Traduzir
-              </TabsTrigger>
-              <TabsTrigger value="suggest" onClick={() => setAction('suggest')}>
-                <Lightbulb className="h-4 w-4 mr-1" />
-                Melhorias
-              </TabsTrigger>
-              <TabsTrigger value="adapt" onClick={() => setAction('adapt')}>
-                <Edit className="h-4 w-4 mr-1" />
-                Adaptar
-              </TabsTrigger>
-              <TabsTrigger value="update" onClick={() => setAction('update')}>
-                <RefreshCw className="h-4 w-4 mr-1" />
-                Atualizar
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-
-          <Button onClick={() => handleChat(action)} disabled={chatting} className="w-full">
+          <Button onClick={handleChat} disabled={chatting} className="w-full">
             {chatting ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -418,6 +432,13 @@ export default function DocumentPage() {
           <AnswerCompareGrid answers={answers} />
         </div>
       )}
+
+      <PipelineWizard
+        documentId={documentId}
+        documentTitle={document.title}
+        open={pipelineSelectorOpen}
+        onOpenChange={setPipelineSelectorOpen}
+      />
     </div>
   );
 }

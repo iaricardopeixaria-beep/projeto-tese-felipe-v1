@@ -13,7 +13,11 @@ export async function POST(
 ) {
   try {
     const { id: documentId } = await params;
-    const { provider = 'openai', model = 'gpt-4o-mini' } = await req.json();
+    const {
+      provider = 'openai',
+      model = 'gpt-4o-mini',
+      sourceDocumentPath // Optional: for pipeline usage
+    } = await req.json();
 
     // Busca documento no Supabase
     const { data: doc, error: docError } = await supabase
@@ -46,7 +50,7 @@ export async function POST(
     console.log(`[IMPROVE] Created job ${job.id} for document ${documentId}`);
 
     // Executa análise em background (não bloqueia resposta)
-    executeImprovement(job.id, documentId, doc, provider, model).catch(err => {
+    executeImprovement(job.id, documentId, doc, provider, model, sourceDocumentPath).catch(err => {
       console.error('[IMPROVE] Background error:', err);
     });
 
@@ -115,7 +119,8 @@ async function executeImprovement(
   documentId: string,
   doc: any,
   provider: 'openai' | 'gemini',
-  model: string
+  model: string,
+  sourceDocumentPath?: string
 ) {
   try {
     console.log(`[IMPROVE] Starting analysis for job ${jobId}`);
@@ -126,19 +131,27 @@ async function executeImprovement(
       .update({ status: 'analyzing', started_at: new Date().toISOString() })
       .eq('id', jobId);
 
-    // Baixa documento do Storage
-    const { data: fileBlob, error: downloadError } = await supabase.storage
-      .from('documents')
-      .download(doc.file_path);
+    let tempPath: string;
 
-    if (downloadError || !fileBlob) {
-      throw new Error(`Failed to download: ${downloadError?.message}`);
+    if (sourceDocumentPath) {
+      // Pipeline mode - use provided path directly
+      console.log(`[IMPROVE] Using source document from pipeline: ${sourceDocumentPath}`);
+      tempPath = sourceDocumentPath;
+    } else {
+      // Standalone mode - download from Storage
+      const { data: fileBlob, error: downloadError } = await supabase.storage
+        .from('documents')
+        .download(doc.file_path);
+
+      if (downloadError || !fileBlob) {
+        throw new Error(`Failed to download: ${downloadError?.message}`);
+      }
+
+      const tempDir = os.tmpdir();
+      tempPath = path.join(tempDir, `${documentId}_improve.docx`);
+      const buffer = Buffer.from(await fileBlob.arrayBuffer());
+      await fs.writeFile(tempPath, buffer);
     }
-
-    const tempDir = os.tmpdir();
-    const tempPath = path.join(tempDir, `${documentId}_improve.docx`);
-    const buffer = Buffer.from(await fileBlob.arrayBuffer());
-    await fs.writeFile(tempPath, buffer);
 
     // Extrai estrutura do documento
     console.log(`[IMPROVE] Extracting structure...`);

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -51,7 +51,9 @@ const IMPROVEMENT_TYPE_LABELS: Record<string, { label: string; color: string }> 
 export default function ImprovementPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const jobId = params.jobId as string;
+  const pipelineId = searchParams.get('pipeline');
 
   const [job, setJob] = useState<ImprovementJob | null>(null);
   const [loading, setLoading] = useState(true);
@@ -114,6 +116,33 @@ export default function ImprovementPage() {
 
     try {
       setApplying(true);
+
+      // Pipeline mode - approve and continue
+      if (pipelineId) {
+        toast.loading('Aplicando melhorias e continuando pipeline...');
+
+        const res = await fetch(`/api/pipeline/${pipelineId}/approve`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            approvedItems: Array.from(acceptedSuggestions)
+          })
+        });
+
+        if (!res.ok) {
+          const error = await res.json();
+          throw new Error(error.error || 'Falha ao aprovar melhorias');
+        }
+
+        toast.dismiss();
+        toast.success('Melhorias aprovadas! Pipeline continuando...');
+
+        // Redirect back to pipeline page
+        router.push(`/pipeline/${pipelineId}`);
+        return;
+      }
+
+      // Standalone mode - apply and download
       toast.loading(`Aplicando ${acceptedSuggestions.size} melhorias...`);
 
       const res = await fetch(`/api/improve/${jobId}/apply`, {
@@ -283,16 +312,26 @@ export default function ImprovementPage() {
           onClick={applyImprovements}
           disabled={acceptedCount === 0 || applying}
           size="lg"
+          className={pipelineId ? 'bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800' : ''}
         >
           {applying ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Aplicando...
+              {pipelineId ? 'Aprovando...' : 'Aplicando...'}
             </>
           ) : (
             <>
-              <Download className="mr-2 h-4 w-4" />
-              Aplicar {acceptedCount > 0 ? `(${acceptedCount})` : ''}
+              {pipelineId ? (
+                <>
+                  <CheckCircle2 className="mr-2 h-4 w-4" />
+                  Aprovar e Continuar Pipeline {acceptedCount > 0 ? `(${acceptedCount})` : ''}
+                </>
+              ) : (
+                <>
+                  <Download className="mr-2 h-4 w-4" />
+                  Aplicar {acceptedCount > 0 ? `(${acceptedCount})` : ''}
+                </>
+              )}
             </>
           )}
         </Button>
