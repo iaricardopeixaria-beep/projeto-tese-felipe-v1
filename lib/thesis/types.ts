@@ -60,6 +60,25 @@ export interface ChapterChunk {
   created_at: string;
 }
 
+/**
+ * Compiled/merged thesis version
+ */
+export interface ThesisVersion {
+  id: string;
+  thesis_id: string;
+  version_number: number;
+  file_path: string; // Supabase Storage path to compiled .docx
+  total_pages: number | null;
+  chapters_included: {
+    chapterId: string;
+    versionId: string;
+    chapterOrder: number;
+    chapterTitle: string;
+  }[];
+  metadata: Record<string, any>;
+  created_at: string;
+}
+
 // ============================================================================
 // ENUMS & CONSTANTS
 // ============================================================================
@@ -204,6 +223,62 @@ export interface CreateVersionRequest {
   created_by_operation: ChapterOperation;
   parent_version_id?: string;
   metadata?: Record<string, any>;
+}
+
+/**
+ * Request to perform chapter operation with multi-chapter context
+ */
+export interface ChapterOperationRequest {
+  // Context from other chapters (optional)
+  context_version_ids?: string[];
+}
+
+/**
+ * Request to improve a chapter
+ */
+export interface ImproveChapterRequest extends ChapterOperationRequest {
+  provider: string;
+  model: string;
+}
+
+/**
+ * Request to adjust a chapter
+ */
+export interface AdjustChapterRequest extends ChapterOperationRequest {
+  instructions: string;
+  creativity: number;
+  provider: string;
+  model: string;
+  use_grounding?: boolean;
+}
+
+/**
+ * Request to adapt a chapter
+ */
+export interface AdaptChapterRequest extends ChapterOperationRequest {
+  style: 'academic' | 'professional' | 'simplified' | 'custom';
+  target_audience?: string;
+  provider: string;
+  model: string;
+}
+
+/**
+ * Request to update a chapter
+ */
+export interface UpdateChapterRequest extends ChapterOperationRequest {
+  provider: string;
+  model: string;
+}
+
+/**
+ * Context summary for displaying which chapters were used
+ */
+export interface OperationContextSummary {
+  chapter_id: string;
+  chapter_title: string;
+  chapter_order: number;
+  version_id: string;
+  version_number: number;
 }
 
 // ============================================================================

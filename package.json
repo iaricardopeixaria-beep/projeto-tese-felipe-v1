@@ -25,6 +25,7 @@
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.1",
     "docx": "^8.5.0",
+    "docx-merger": "^1.2.2",
     "elasticlunr": "^0.9.5",
     "formidable": "^3.5.1",
     "jszip": "^3.10.1",

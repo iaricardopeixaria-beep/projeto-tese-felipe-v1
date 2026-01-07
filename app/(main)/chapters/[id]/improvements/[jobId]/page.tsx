@@ -20,6 +20,8 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { ImprovementSuggestion } from '@/lib/improvement/types';
+import { OperationContextDisplay } from '@/components/thesis/operation-context-display';
+import type { OperationContextSummary } from '@/lib/thesis/types';
 
 type ImprovementJob = {
   id: string;
@@ -32,6 +34,10 @@ type ImprovementJob = {
   newVersionId?: string;
   createdAt: string;
   completedAt?: string;
+  metadata?: {
+    contextChapters?: OperationContextSummary[];
+    [key: string]: any;
+  };
 };
 
 type OperationReference = {
@@ -277,6 +283,11 @@ export default function ChapterImprovementPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Context Chapters Display */}
+      {job.metadata?.contextChapters && (
+        <OperationContextDisplay contextChapters={job.metadata.contextChapters} />
+      )}
 
       {/* References Card - Only show if references were used */}
       {references.length > 0 && (

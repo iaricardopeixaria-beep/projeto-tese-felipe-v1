@@ -25,12 +25,14 @@ export async function POST(
       versionId,
       provider = 'gemini',
       model = 'gemini-2.5-flash',
-      references = []
+      references = [],
+      contextVersionIds = []
     }: {
       versionId: string;
       provider?: AIProvider;
       model?: string;
       references?: ReferenceInput[];
+      contextVersionIds?: string[];
     } = body;
 
     if (!versionId) {
@@ -43,6 +45,7 @@ export async function POST(
     // References are optional for update, but typically expected
     console.log(`[CHAPTER-UPDATE-API] Starting update for chapter ${chapterId}, version ${versionId}`);
     console.log(`[CHAPTER-UPDATE-API] References provided: ${references.length}`);
+    console.log(`[CHAPTER-UPDATE-API] Context chapters: ${contextVersionIds.length}`);
 
     // Cria job
     const jobId = await createOperationJob(chapterId, versionId, 'update');
@@ -78,7 +81,8 @@ export async function POST(
       versionId,
       provider,
       model,
-      references
+      references,
+      contextVersionIds
     ).catch(err => {
       console.error('[CHAPTER-UPDATE-API] Background error:', err);
     });
@@ -88,7 +92,8 @@ export async function POST(
       message: 'Update operation started',
       chapterId,
       versionId,
-      referencesCount: references.length
+      referencesCount: references.length,
+      contextChaptersCount: contextVersionIds.length
     });
 
   } catch (error: any) {

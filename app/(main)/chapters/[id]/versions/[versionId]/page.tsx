@@ -29,6 +29,7 @@ import { ReferenceManager, type ReferenceItem } from '@/components/thesis/refere
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { ExpandableTextarea } from '@/components/expandable-textarea';
 import { Checkbox } from '@/components/ui/checkbox';
+import { ContextSelector } from '@/components/thesis/context-selector';
 
 type ChapterVersion = {
   id: string;
@@ -57,6 +58,8 @@ export default function ChapterVersionPage() {
   const [version, setVersion] = useState<ChapterVersion | null>(null);
   const [allVersions, setAllVersions] = useState<ChapterVersion[]>([]);
   const [loading, setLoading] = useState(true);
+  const [allChapters, setAllChapters] = useState<any[]>([]);
+  const [contextVersionIds, setContextVersionIds] = useState<string[]>([]);
 
   // Operation states
   const [improveDialogOpen, setImproveDialogOpen] = useState(false);
@@ -114,6 +117,30 @@ export default function ChapterVersionPage() {
         foundVersion.chapterOrder = chapterData.chapter.chapterOrder;
         foundVersion.thesisTitle = chapterData.chapter.thesisTitle;
         foundVersion.thesisId = chapterData.chapter.thesisId;
+
+        // Load all chapters from thesis for context selection
+        if (chapterData.chapter.thesisId) {
+          const thesisRes = await fetch(`/api/theses/${chapterData.chapter.thesisId}`);
+          if (thesisRes.ok) {
+            const thesisData = await thesisRes.json();
+            const chaptersWithVersions = await Promise.all(
+              (thesisData.chapters || []).map(async (ch: any) => {
+                const vRes = await fetch(`/api/chapters/${ch.id}/versions`);
+                if (vRes.ok) {
+                  const vData = await vRes.json();
+                  return {
+                    id: ch.id,
+                    title: ch.title,
+                    chapterOrder: ch.chapterOrder,
+                    versions: vData.versions || []
+                  };
+                }
+                return null;
+              })
+            );
+            setAllChapters(chaptersWithVersions.filter(Boolean));
+          }
+        }
       }
 
       setVersion(foundVersion);
@@ -180,7 +207,8 @@ export default function ChapterVersionPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           versionId,
-          references: referencesForAPI
+          references: referencesForAPI,
+          contextVersionIds
         })
       });
 
@@ -281,7 +309,8 @@ export default function ChapterVersionPage() {
           provider: adjustProvider,
           model: adjustModel,
           useGrounding: adjustUseGrounding,
-          references: referencesForAPI
+          references: referencesForAPI,
+          contextVersionIds
         })
       });
 
@@ -331,7 +360,8 @@ export default function ChapterVersionPage() {
           versionId,
           style: adaptStyle,
           targetAudience: adaptStyle === 'custom' ? adaptTargetAudience.trim() : undefined,
-          references: referencesForAPI
+          references: referencesForAPI,
+          contextVersionIds
         })
       });
 
@@ -379,7 +409,8 @@ export default function ChapterVersionPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           versionId,
-          references: referencesForAPI
+          references: referencesForAPI,
+          contextVersionIds
         })
       });
 
@@ -511,36 +542,10 @@ export default function ChapterVersionPage() {
             </div>
 
             {/* Stats */}
-            <div className="grid grid-cols-2 gap-4">
-              {version.pages && (
-                <div className="flex flex-col gap-1">
-                  <span className="text-sm text-muted-foreground">Páginas</span>
-                  <span className="text-2xl font-bold">{version.pages}</span>
-                </div>
-              )}
-              {version.chunksCount && (
-                <div className="flex flex-col gap-1">
-                  <span className="text-sm text-muted-foreground">Chunks</span>
-                  <span className="text-2xl font-bold">{version.chunksCount}</span>
-                </div>
-              )}
-            </div>
-
-            {/* File Path */}
-            <div className="flex flex-col gap-1">
-              <span className="text-sm text-muted-foreground">Arquivo</span>
-              <code className="text-xs bg-muted p-2 rounded overflow-x-auto">
-                {version.filePath}
-              </code>
-            </div>
-
-            {/* Metadata */}
-            {version.metadata && Object.keys(version.metadata).length > 0 && (
+            {version.pages && (
               <div className="flex flex-col gap-1">
-                <span className="text-sm text-muted-foreground">Metadados</span>
-                <pre className="text-xs bg-muted p-3 rounded overflow-x-auto">
-                  {JSON.stringify(version.metadata, null, 2)}
-                </pre>
+                <span className="text-sm text-muted-foreground">Páginas</span>
+                <span className="text-2xl font-bold">{version.pages}</span>
               </div>
             )}
           </CardContent>
@@ -685,6 +690,14 @@ export default function ChapterVersionPage() {
                 </DialogHeader>
                 <ScrollArea className="max-h-[60vh] pr-4">
                   <div className="space-y-4 py-4">
+                    {allChapters.length > 0 && (
+                      <ContextSelector
+                        chapters={allChapters}
+                        currentChapterId={chapterId}
+                        selectedVersionIds={contextVersionIds}
+                        onSelectionChange={setContextVersionIds}
+                      />
+                    )}
                     <div className="space-y-2">
                       <Label>Materiais de Referência (Opcional)</Label>
                       <p className="text-sm text-muted-foreground">
@@ -802,6 +815,14 @@ export default function ChapterVersionPage() {
                 </DialogHeader>
                 <ScrollArea className="max-h-[60vh] pr-4">
                   <div className="space-y-4 py-4">
+                    {allChapters.length > 0 && (
+                      <ContextSelector
+                        chapters={allChapters}
+                        currentChapterId={chapterId}
+                        selectedVersionIds={contextVersionIds}
+                        onSelectionChange={setContextVersionIds}
+                      />
+                    )}
                     <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
                       <div className="flex items-start gap-2">
                         <Info className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
@@ -935,10 +956,18 @@ export default function ChapterVersionPage() {
                 </DialogHeader>
                 <ScrollArea className="max-h-[60vh] pr-4">
                   <div className="space-y-4 py-4">
+                    {allChapters.length > 0 && (
+                      <ContextSelector
+                        chapters={allChapters}
+                        currentChapterId={chapterId}
+                        selectedVersionIds={contextVersionIds}
+                        onSelectionChange={setContextVersionIds}
+                      />
+                    )}
                     <div className="space-y-2">
                       <Label htmlFor="adapt-style">Estilo de Adaptação *</Label>
                       <p className="text-sm text-muted-foreground">
-                        Escolha como deseja adaptar o tom e estilo do capítulo
+                        Escolha como deseja adaptar o ton e estilo do capítulo
                       </p>
                       <Select value={adaptStyle} onValueChange={(value: any) => setAdaptStyle(value)}>
                         <SelectTrigger id="adapt-style">
@@ -1021,6 +1050,14 @@ export default function ChapterVersionPage() {
                 </DialogHeader>
                 <ScrollArea className="max-h-[60vh] pr-4">
                   <div className="space-y-4 py-4">
+                    {allChapters.length > 0 && (
+                      <ContextSelector
+                        chapters={allChapters}
+                        currentChapterId={chapterId}
+                        selectedVersionIds={contextVersionIds}
+                        onSelectionChange={setContextVersionIds}
+                      />
+                    )}
                     <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
                       <div className="flex items-start gap-2">
                         <Info className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />

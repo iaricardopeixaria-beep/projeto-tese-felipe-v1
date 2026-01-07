@@ -28,7 +28,8 @@ export async function POST(
       provider = 'openai',
       model = 'gpt-4o-mini',
       useGrounding = false,
-      references = []
+      references = [],
+      contextVersionIds = []
     }: {
       versionId: string;
       instructions: string;
@@ -37,6 +38,7 @@ export async function POST(
       model?: string;
       useGrounding?: boolean;
       references?: ReferenceInput[];
+      contextVersionIds?: string[];
     } = body;
 
     if (!versionId) {
@@ -59,6 +61,7 @@ export async function POST(
     console.log(`[CHAPTER-ADJUST-API] Provider: ${provider}, Model: ${model}`);
     console.log(`[CHAPTER-ADJUST-API] Use Grounding: ${useGrounding}`);
     console.log(`[CHAPTER-ADJUST-API] References provided: ${references.length}`);
+    console.log(`[CHAPTER-ADJUST-API] Context chapters: ${contextVersionIds.length}`);
 
     // Cria job
     const jobId = await createOperationJob(chapterId, versionId, 'adjust');
@@ -97,7 +100,8 @@ export async function POST(
       provider,
       model,
       references,
-      useGrounding
+      useGrounding,
+      contextVersionIds
     ).catch(err => {
       console.error('[CHAPTER-ADJUST-API] Background error:', err);
     });
@@ -107,7 +111,8 @@ export async function POST(
       message: 'Adjust operation started',
       chapterId,
       versionId,
-      referencesCount: references.length
+      referencesCount: references.length,
+      contextChaptersCount: contextVersionIds.length
     });
 
   } catch (error: any) {

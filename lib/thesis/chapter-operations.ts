@@ -7,6 +7,7 @@ import { AIProvider } from '@/lib/ai/types';
 import { SupportedLanguage } from '@/lib/translation/types';
 import { processChapterVersion } from './chapter-processor';
 import { processReferences, formatReferencesForContext, type ReferenceInput } from './reference-processor';
+import type { OperationContextSummary } from './types';
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
@@ -117,7 +118,8 @@ export async function executeImproveOperation(
   versionId: string,
   provider: AIProvider,
   model: string,
-  references: ReferenceInput[] = []
+  references: ReferenceInput[] = [],
+  contextVersionIds: string[] = []
 ): Promise<string> {
   try {
     console.log(`[CHAPTER-IMPROVE] Starting job ${jobId} for version ${versionId}`);
@@ -166,6 +168,12 @@ export async function executeImproveOperation(
       console.log(`[CHAPTER-IMPROVE] References processed, context length: ${referencesContext.length} chars`);
     }
 
+    // Build chapter context if provided
+    const { context: chapterContext, summary: contextSummary } = await buildChapterContextForOperation(contextVersionIds);
+
+    // Combine all contexts
+    const combinedContext = referencesContext + chapterContext;
+
     // Gera contexto global
     console.log(`[CHAPTER-IMPROVE] Generating global context...`);
     const apiKey = provider === 'openai'
@@ -178,7 +186,7 @@ export async function executeImproveOperation(
       provider,
       model,
       apiKey,
-      referencesContext // Pass references to global context
+      combinedContext // Pass combined context (references + chapters)
     );
 
     await updateOperationJob(jobId, { progress: 40 });
@@ -221,7 +229,11 @@ export async function executeImproveOperation(
       versionId,
       sourcePath,
       'improve',
-      { suggestions: allSuggestions, globalContext }
+      {
+        suggestions: allSuggestions,
+        globalContext,
+        contextChapters: contextSummary
+      }
     );
 
     await updateOperationJob(jobId, { progress: 90 });
@@ -491,7 +503,8 @@ export async function executeAdjustOperation(
   provider: AIProvider,
   model: string,
   references: ReferenceInput[] = [],
-  useGrounding: boolean = false
+  useGrounding: boolean = false,
+  contextVersionIds: string[] = []
 ): Promise<string> {
   try {
     console.log(`[CHAPTER-ADJUST] Starting job ${jobId} for version ${versionId}`);
@@ -536,9 +549,13 @@ export async function executeAdjustOperation(
       console.log(`[CHAPTER-ADJUST] References processed, context length: ${referencesContext.length} chars`);
     }
 
-    // Add references to instructions if available
-    const enhancedInstructions = referencesContext
-      ? `${instructions}\n\nREFERENCE MATERIALS:\n${referencesContext}`
+    // Build chapter context if provided
+    const { context: chapterContext, summary: contextSummary } = await buildChapterContextForOperation(contextVersionIds);
+
+    // Combine all contexts and add to instructions
+    const combinedContext = referencesContext + chapterContext;
+    const enhancedInstructions = combinedContext
+      ? `${instructions}\n\nREFERENCE MATERIALS:\n${combinedContext}`
       : instructions;
 
     // Executa análise de ajustes
@@ -569,7 +586,12 @@ export async function executeAdjustOperation(
       versionId,
       sourcePath,
       'adjust',
-      { instructions, creativity, suggestions }
+      {
+        instructions,
+        creativity,
+        suggestions,
+        contextChapters: contextSummary
+      }
     );
 
     await updateOperationJob(jobId, { progress: 90 });
@@ -593,6 +615,7 @@ export async function executeAdjustOperation(
         metadata: {
           instructions,
           creativity,
+          contextChapters: contextSummary,
           suggestions: suggestions.map(s => ({
             id: s.id,
             type: 'adjustment',
@@ -634,7 +657,8 @@ export async function executeAdaptOperation(
   targetAudience: string | undefined,
   provider: AIProvider,
   model: string,
-  references: ReferenceInput[] = []
+  references: ReferenceInput[] = [],
+  contextVersionIds: string[] = []
 ): Promise<string> {
   try {
     console.log(`[CHAPTER-ADAPT] Starting job ${jobId} for version ${versionId}`);
@@ -677,6 +701,9 @@ export async function executeAdaptOperation(
       console.log(`[CHAPTER-ADAPT] Reference context length: ${referenceContext.length} chars`);
     }
 
+    // Build chapter context if provided
+    const { context: chapterContext, summary: contextSummary } = await buildChapterContextForOperation(contextVersionIds);
+
     await updateOperationJob(jobId, { progress: 40 });
 
     // Get API key for the provider
@@ -705,7 +732,12 @@ export async function executeAdaptOperation(
       versionId,
       sourcePath,
       'adapt',
-      { style, targetAudience, suggestionsCount: suggestions.length }
+      {
+        style,
+        targetAudience,
+        suggestionsCount: suggestions.length,
+        contextChapters: contextSummary
+      }
     );
 
     await updateOperationJob(jobId, { progress: 85 });
@@ -726,6 +758,7 @@ export async function executeAdaptOperation(
         metadata: {
           style,
           targetAudience,
+          contextChapters: contextSummary,
           suggestions: suggestions.map(s => ({
             id: s.id,
             type: 'adaptation',
@@ -772,7 +805,8 @@ export async function executeUpdateOperation(
   versionId: string,
   provider: AIProvider,
   model: string,
-  references: ReferenceInput[] = []
+  references: ReferenceInput[] = [],
+  contextVersionIds: string[] = []
 ): Promise<string> {
   try {
     console.log(`[CHAPTER-UPDATE] Starting job ${jobId} for version ${versionId}`);
@@ -818,6 +852,12 @@ export async function executeUpdateOperation(
       console.log(`[CHAPTER-UPDATE] WARNING: No references provided for update operation`);
     }
 
+    // Build chapter context if provided
+    const { context: chapterContext, summary: contextSummary } = await buildChapterContextForOperation(contextVersionIds);
+
+    // Combine all contexts
+    const combinedContext = referencesContext + chapterContext;
+
     await updateOperationJob(jobId, { progress: 40 });
 
     // Extrai estrutura do documento
@@ -838,7 +878,7 @@ export async function executeUpdateOperation(
       provider,
       model,
       apiKey,
-      referencesContext
+      combinedContext
     );
 
     await updateOperationJob(jobId, { progress: 60 });
@@ -883,7 +923,11 @@ export async function executeUpdateOperation(
       versionId,
       sourcePath,
       'update',
-      { referencesCount: references.length, suggestionsCount: allSuggestions.length }
+      {
+        referencesCount: references.length,
+        suggestionsCount: allSuggestions.length,
+        contextChapters: contextSummary
+      }
     );
 
     await updateOperationJob(jobId, { progress: 85 });
@@ -903,6 +947,7 @@ export async function executeUpdateOperation(
         completed_at: new Date().toISOString(),
         metadata: {
           referencesCount: references.length,
+          contextChapters: contextSummary,
           suggestions: allSuggestions.map((s: any) => ({
             id: s.id,
             type: 'update',
@@ -1026,4 +1071,97 @@ Respond with ONLY a JSON object in this format:
     console.error('[TRANSLATE] Failed to parse AI response:', error);
     return [];
   }
+}
+
+/**
+ * Get API key for the specified provider
+ */
+function getAPIKey(provider: AIProvider): string {
+  switch (provider) {
+    case 'openai':
+      return process.env.OPENAI_API_KEY!;
+    case 'gemini':
+      return process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY!;
+    case 'grok':
+      return process.env.GROK_API_KEY!;
+    default:
+      throw new Error(`Unsupported provider: ${provider}`);
+  }
+}
+
+/**
+ * Build context from other chapter versions for operation prompts
+ * Loads chapter chunks and formats them as readable context
+ */
+async function buildChapterContextForOperation(
+  contextVersionIds: string[]
+): Promise<{ context: string; summary: OperationContextSummary[] }> {
+  if (!contextVersionIds || contextVersionIds.length === 0) {
+    return { context: '', summary: [] };
+  }
+
+  console.log(`[CHAPTER-CONTEXT] Building context from ${contextVersionIds.length} chapter versions`);
+
+  // Fetch version metadata and chunks
+  const { data: versionsData, error } = await supabase
+    .from('chapter_versions')
+    .select(`
+      id,
+      version_number,
+      chapters:chapter_id (
+        id,
+        title,
+        chapter_order
+      )
+    `)
+    .in('id', contextVersionIds);
+
+  if (error || !versionsData) {
+    console.error('[CHAPTER-CONTEXT] Error fetching versions:', error);
+    return { context: '', summary: [] };
+  }
+
+  // Build summary for metadata
+  const summary: OperationContextSummary[] = versionsData.map((v: any) => {
+    const chapter = Array.isArray(v.chapters) ? v.chapters[0] : v.chapters;
+    return {
+      chapter_id: chapter.id,
+      chapter_title: chapter.title,
+      chapter_order: chapter.chapter_order,
+      version_id: v.id,
+      version_number: v.version_number
+    };
+  });
+
+  // Fetch chunks for each version
+  const contextParts: string[] = [];
+
+  for (const versionData of versionsData) {
+    const chapter = Array.isArray(versionData.chapters) ? versionData.chapters[0] : versionData.chapters;
+
+    // Fetch chunks for this version
+    const { data: chunks, error: chunksError } = await supabase
+      .from('chapter_chunks')
+      .select('text, page_from, page_to')
+      .eq('chapter_version_id', versionData.id)
+      .order('chunk_index');
+
+    if (chunksError || !chunks || chunks.length === 0) {
+      console.warn(`[CHAPTER-CONTEXT] No chunks found for version ${versionData.id}`);
+      continue;
+    }
+
+    // Format chunks into readable text
+    const chunkTexts = chunks.map((c: any) => c.text).join('\n\n');
+    const contextHeader = `\n\n=== CAPÍTULO ${chapter.chapter_order}: ${chapter.title} (Versão ${versionData.version_number}) ===\n\n`;
+    contextParts.push(contextHeader + chunkTexts);
+  }
+
+  const fullContext = contextParts.length > 0
+    ? `\n\nCONTEXTO DE CAPÍTULOS RELACIONADOS:\n${contextParts.join('\n\n')}`
+    : '';
+
+  console.log(`[CHAPTER-CONTEXT] Built context: ${fullContext.length} characters from ${summary.length} chapters`);
+
+  return { context: fullContext, summary };
 }

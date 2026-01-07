@@ -25,12 +25,14 @@ export async function POST(
       versionId,
       provider = 'openai',
       model = 'gpt-4o-mini',
-      references = []
+      references = [],
+      contextVersionIds = []
     }: {
       versionId: string;
       provider?: AIProvider;
       model?: string;
       references?: ReferenceInput[];
+      contextVersionIds?: string[];
     } = body;
 
     if (!versionId) {
@@ -42,6 +44,7 @@ export async function POST(
 
     console.log(`[CHAPTER-IMPROVE-API] Starting improve for chapter ${chapterId}, version ${versionId}`);
     console.log(`[CHAPTER-IMPROVE-API] References provided: ${references.length}`);
+    console.log(`[CHAPTER-IMPROVE-API] Context chapters: ${contextVersionIds.length}`);
 
     // Cria job
     const jobId = await createOperationJob(chapterId, versionId, 'improve');
@@ -71,7 +74,7 @@ export async function POST(
     }
 
     // Executa em background
-    executeImproveOperation(jobId, chapterId, versionId, provider, model, references).catch(err => {
+    executeImproveOperation(jobId, chapterId, versionId, provider, model, references, contextVersionIds).catch(err => {
       console.error('[CHAPTER-IMPROVE-API] Background error:', err);
     });
 
@@ -80,7 +83,8 @@ export async function POST(
       message: 'Improvement started',
       chapterId,
       versionId,
-      referencesCount: references.length
+      referencesCount: references.length,
+      contextChaptersCount: contextVersionIds.length
     });
 
   } catch (error: any) {

@@ -27,7 +27,8 @@ export async function POST(
       targetAudience,
       provider = 'openai',
       model = 'gpt-4o-mini',
-      references = []
+      references = [],
+      contextVersionIds = []
     }: {
       versionId: string;
       style?: 'academic' | 'professional' | 'simplified' | 'custom';
@@ -35,6 +36,7 @@ export async function POST(
       provider?: AIProvider;
       model?: string;
       references?: ReferenceInput[];
+      contextVersionIds?: string[];
     } = body;
 
     if (!versionId) {
@@ -54,6 +56,7 @@ export async function POST(
     console.log(`[CHAPTER-ADAPT-API] Starting adapt for chapter ${chapterId}, version ${versionId}`);
     console.log(`[CHAPTER-ADAPT-API] Style: ${style}, Target audience: ${targetAudience || 'general'}`);
     console.log(`[CHAPTER-ADAPT-API] References provided: ${references.length}`);
+    console.log(`[CHAPTER-ADAPT-API] Context chapters: ${contextVersionIds.length}`);
 
     // Cria job
     const jobId = await createOperationJob(chapterId, versionId, 'adapt');
@@ -91,7 +94,8 @@ export async function POST(
       targetAudience,
       provider,
       model,
-      references
+      references,
+      contextVersionIds
     ).catch(err => {
       console.error('[CHAPTER-ADAPT-API] Background error:', err);
     });
@@ -103,7 +107,8 @@ export async function POST(
       versionId,
       style,
       targetAudience,
-      referencesCount: references.length
+      referencesCount: references.length,
+      contextChaptersCount: contextVersionIds.length
     });
 
   } catch (error: any) {
