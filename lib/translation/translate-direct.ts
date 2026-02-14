@@ -97,11 +97,29 @@ TRANSLATION (must have similar length and same number of sentences, with MANDATO
   return finalResult;
 }
 
+/** Request timeout for each API call (2 min) - avoids hanging on rate limit or slow server */
+const REQUEST_TIMEOUT_MS = 120000;
+
 /**
  * Delay helper
  */
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function isTimeoutOrRateLimit(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const msg = (error as any).message ?? '';
+  const code = (error as any).code;
+  return (
+    msg.includes('429') ||
+    msg.includes('Rate limit') ||
+    msg.includes('timeout') ||
+    msg.includes('ETIMEDOUT') ||
+    msg.includes('ECONNRESET') ||
+    (error as any).name === 'AbortError' ||
+    code === 'ECONNABORTED'
+  );
 }
 
 /**
@@ -114,25 +132,29 @@ async function translateWithGemini(prompt: string, model: string, maxTokens: num
   const genAI = new GoogleGenerativeAI(apiKey);
   const geminiModel = genAI.getGenerativeModel({ model });
 
-  const maxRetries = 2; // Reduzido de 5 para 2 - cai rápido pro fallback
+  const maxRetries = 4; // More attempts for timeout/rate limit before failing
   let lastError: any;
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
-      // Delay progressivo apenas em retry
       if (attempt > 0) {
-        const delayMs = 1000; // 1s fixo no retry
+        const delayMs = 5000; // 5s on retry (timeout/rate limit)
         console.log(`[GEMINI] ⏳ Retry ${attempt}/${maxRetries} after ${delayMs}ms delay...`);
         await sleep(delayMs);
       }
 
-      const result = await geminiModel.generateContent({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.3,
-          maxOutputTokens: maxTokens
-        }
-      });
+      const result = await Promise.race([
+        geminiModel.generateContent({
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.3,
+            maxOutputTokens: maxTokens
+          }
+        }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Translation timeout after 40% - possibly API rate limit or server timeout')), REQUEST_TIMEOUT_MS)
+        )
+      ]);
 
       const response = result.response;
       const text = response.text().trim();
@@ -156,106 +178,126 @@ async function translateWithGemini(prompt: string, model: string, maxTokens: num
       }
       const is503 = error.message?.includes('503') || error.message?.includes('overloaded');
       const is429 = error.message?.includes('429') || error.message?.includes('quota');
+      const isTimeout = error.message?.includes('timeout') || isTimeoutOrRateLimit(error);
 
-      if (is503 || is429) {
-        console.warn(`[GEMINI] ⚠ Rate limit/Overload (attempt ${attempt + 1}/${maxRetries})`);
-        // Continua para próxima tentativa
+      if (is503 || is429 || isTimeout) {
+        console.warn(`[GEMINI] ⚠ Rate limit/Overload/Timeout (attempt ${attempt + 1}/${maxRetries}):`, error.message);
         continue;
-      } else {
-        // Erro diferente, não tenta novamente
-        console.error('[GEMINI] ❌ Error:', error.message);
-        throw error;
       }
+      console.error('[GEMINI] ❌ Error:', error.message);
+      throw error;
     }
   }
 
-  // Todas as tentativas falharam
   console.error('[GEMINI] ❌ Failed after', maxRetries, 'attempts');
+  if (lastError && isTimeoutOrRateLimit(lastError)) {
+    throw new Error('Translation timeout after 40% - possibly API rate limit or server timeout');
+  }
   throw lastError;
 }
 
 /**
- * Traduz usando OpenAI com retry automático em caso de rate limit (429)
+ * Traduz usando OpenAI com retry em caso de rate limit (429) ou timeout
  */
 async function translateWithOpenAI(prompt: string, model: string, maxTokens: number): Promise<string> {
   const apiKey = state.settings.openaiKey;
   if (!apiKey) throw new Error('OpenAI API key not configured');
 
   const openai = new OpenAI({ apiKey });
-  const maxRetries = 10; // Tenta até 10x (50s cada = até 500s = ~8min total)
-  let lastError: any;
+  const maxRetries = 10;
+  let lastError: unknown;
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
     try {
-      const completion = await openai.chat.completions.create({
-        model,
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.3,
-        max_tokens: maxTokens
-      });
+      const completion = await openai.chat.completions.create(
+        {
+          model,
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.3,
+          max_tokens: maxTokens
+        },
+        { signal: controller.signal }
+      );
+
+      clearTimeout(timeoutId);
 
       const result = completion.choices[0]?.message?.content?.trim() || '';
-
       if (!result || result.length === 0) {
         throw new Error('OpenAI returned empty response');
       }
-
       return result;
-
-    } catch (error: any) {
+    } catch (error: unknown) {
+      clearTimeout(timeoutId);
       lastError = error;
 
-      // Verifica se é erro de rate limit (429)
-      const is429 = error.message?.includes('429') ||
-                    error.message?.includes('Rate limit') ||
-                    error.status === 429;
+      const is429 =
+        (error as any)?.message?.includes('429') ||
+        (error as any)?.message?.includes('Rate limit') ||
+        (error as any)?.status === 429;
+      const isTimeout = (error as any)?.name === 'AbortError' || isTimeoutOrRateLimit(error);
 
-      if (is429) {
-        const retryNumber = attempt + 1;
-        console.warn(`[OPENAI] ⚠ Rate limit hit (attempt ${retryNumber}/${maxRetries})`);
-
-        if (attempt < maxRetries - 1) {
-          console.log(`[OPENAI] ⏳ Waiting 50 seconds before retry...`);
-          await sleep(50000); // 50 segundos
-          console.log(`[OPENAI] 🔄 Retrying now...`);
-          continue;
-        }
+      if ((is429 || isTimeout) && attempt < maxRetries - 1) {
+        const waitMs = is429 ? 50000 : 15000; // 50s for rate limit, 15s for timeout
+        console.warn(
+          `[OPENAI] ⚠ ${is429 ? 'Rate limit' : 'Timeout'} (attempt ${attempt + 1}/${maxRetries}), waiting ${waitMs / 1000}s...`
+        );
+        await sleep(waitMs);
+        continue;
       }
 
-      // Se não é 429 ou é última tentativa, lança o erro
+      if (isTimeout && attempt >= maxRetries - 1) {
+        throw new Error('Translation timeout after 40% - possibly API rate limit or server timeout');
+      }
       throw error;
     }
   }
 
-  throw lastError || new Error('OpenAI failed after all retries');
+  throw lastError ?? new Error('OpenAI failed after all retries');
 }
 
 /**
- * Traduz usando Grok (xAI)
+ * Traduz usando Grok (xAI) com timeout
  */
 async function translateWithGrok(prompt: string, model: string, maxTokens: number): Promise<string> {
   const apiKey = state.settings.xaiKey;
   if (!apiKey) throw new Error('xAI API key not configured');
 
-  const response = await fetch('https://api.x.ai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`
-    },
-    body: JSON.stringify({
-      model,
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.3,
-      max_tokens: maxTokens
-    })
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Grok API error: ${error}`);
+  try {
+    const response = await fetch('https://api.x.ai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`
+      },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.3,
+        max_tokens: maxTokens
+      }),
+      signal: controller.signal
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Grok API error: ${error}`);
+    }
+
+    const data = await response.json();
+    return data.choices[0]?.message?.content?.trim() || '';
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if ((err as any)?.name === 'AbortError') {
+      throw new Error('Translation timeout after 40% - possibly API rate limit or server timeout');
+    }
+    throw err;
   }
-
-  const data = await response.json();
-  return data.choices[0]?.message?.content?.trim() || '';
 }

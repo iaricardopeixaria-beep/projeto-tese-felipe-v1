@@ -461,12 +461,18 @@ async function translateBatch(
 
   console.log(`  📦 Grouped ${elements.length} paragraphs into ${groups.length} batches for translation`);
 
-  // 🚀 PARALLEL TRANSLATION: Process 5 groups at a time
-  const PARALLEL_LIMIT = 5;
+  // Process 2 groups at a time to reduce API rate limit / timeout (was 5)
+  const PARALLEL_LIMIT = 2;
+  /** Delay between batch rounds (ms) to avoid bursting and rate limits */
+  const DELAY_BETWEEN_BATCHES_MS = 2000;
 
   for (let batchStart = 0; batchStart < groups.length; batchStart += PARALLEL_LIMIT) {
     const batchEnd = Math.min(batchStart + PARALLEL_LIMIT, groups.length);
     const parallelGroups = groups.slice(batchStart, batchEnd);
+
+    if (batchStart > 0) {
+      await new Promise((r) => setTimeout(r, DELAY_BETWEEN_BATCHES_MS));
+    }
 
     console.log(`  ⚡ [${batchStart + 1}-${batchEnd}/${groups.length}] Translating ${parallelGroups.length} groups in parallel...`);
 
