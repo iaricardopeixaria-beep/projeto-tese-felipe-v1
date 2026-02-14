@@ -3,7 +3,6 @@ import { translateDocx } from '@/lib/translation/docx-translator';
 import { TranslationOptions, SupportedLanguage } from '@/lib/translation/types';
 import { AIProvider } from '@/lib/ai/types';
 import { supabase } from '@/lib/supabase';
-import { ensureDocumentInMemory } from '@/lib/document-loader';
 import { randomUUID } from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
@@ -31,7 +30,22 @@ export async function POST(
       );
     }
 
-    const body = await req.json();
+    let body: {
+      targetLanguage?: SupportedLanguage;
+      sourceLanguage?: SupportedLanguage;
+      provider?: AIProvider;
+      model?: string;
+      maxPages?: number;
+      sourceDocumentPath?: string;
+    };
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json(
+        { error: 'Invalid JSON body' },
+        { status: 400 }
+      );
+    }
     const {
       targetLanguage,
       sourceLanguage,
@@ -39,13 +53,6 @@ export async function POST(
       model,
       maxPages,
       sourceDocumentPath // Optional: for pipeline usage
-    }: {
-      targetLanguage: SupportedLanguage;
-      sourceLanguage?: SupportedLanguage;
-      provider: AIProvider;
-      model: string;
-      maxPages?: number;
-      sourceDocumentPath?: string;
     } = body;
 
     if (!targetLanguage || !provider || !model) {
@@ -127,7 +134,12 @@ async function executeTranslation(
       const buffer = Buffer.from(await fileBlob.arrayBuffer());
       await fs.writeFile(tempInputPath, buffer);
     } else {
-      // Pipeline mode - use provided path
+      // Pipeline mode - use provided path; ensure file exists
+      try {
+        await fs.access(sourceDocumentPath, fs.constants.R_OK);
+      } catch (err) {
+        throw new Error(`Source document not found or not readable: ${sourceDocumentPath}`);
+      }
       console.log('[TRANSLATE] Using source document from pipeline:', sourceDocumentPath);
     }
 
@@ -196,9 +208,11 @@ async function executeTranslation(
       error_message: error.message
     }).eq('id', jobId);
   } finally {
-    // Limpa arquivos temporários
+    // Limpa arquivos temporários (só desliga tempInputPath se fomos nós que criamos; no pipeline o path é do caller)
     try {
-      await fs.unlink(tempInputPath);
+      if (!sourceDocumentPath) await fs.unlink(tempInputPath);
+    } catch {}
+    try {
       await fs.unlink(tempOutputPath);
     } catch {}
   }

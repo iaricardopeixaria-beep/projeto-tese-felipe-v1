@@ -629,6 +629,7 @@ export class PipelineEngine {
 
   /**
    * Wait for a sub-job to complete (poll until done)
+   * For translate we poll Supabase directly to avoid "fetch failed" when server calls its own URL (e.g. on Railway).
    */
   private async waitForJobCompletion(operation: string, jobId: string): Promise<void> {
     const maxWaitTime = 30 * 60 * 1000; // 30 minutes max
@@ -636,7 +637,10 @@ export class PipelineEngine {
     const startTime = Date.now();
 
     while (Date.now() - startTime < maxWaitTime) {
-      const job = await this.getJobStatus(operation, jobId);
+      const job =
+        operation === 'translate'
+          ? await this.getTranslationJob(jobId)
+          : await this.getJobStatus(operation, jobId);
 
       if (job.status === 'completed') {
         return;
