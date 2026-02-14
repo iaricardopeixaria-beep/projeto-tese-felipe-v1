@@ -12,6 +12,7 @@ import {
   OperationConfigs,
   PipelineStatus
 } from './types';
+import { createTranslationJob, executeTranslation } from '@/lib/translation/run-translation';
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
@@ -345,46 +346,46 @@ export class PipelineEngine {
   }
 
   /**
-   * Execute TRANSLATE operation
+   * Execute TRANSLATE operation (in-process, no HTTP fetch)
    */
   private async executeTranslate(context: PipelineExecutionContext): Promise<OperationResult> {
-    // Call translate API internally
-    //const { config, sourceDocumentPath } = context;
     const { config, sourceDocumentPath, documentId } = context;
 
     const translateConfig = config as any;
-    const apiUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3001';
-    const url = `${apiUrl}/api/translate/${documentId}`;
 
-    console.log(`[PIPELINE] Calling translate API: ${url}`);
+    // Load document row for output path and metadata
+    const { data: doc, error: docError } = await supabase
+      .from('documents')
+      .select('file_path')
+      .eq('id', documentId)
+      .single();
 
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        targetLanguage: translateConfig.targetLanguage,
-        sourceLanguage: translateConfig.sourceLanguage,
-        provider: translateConfig.provider,
-        model: translateConfig.model,
-        maxPages: translateConfig.maxPages,
-        sourceDocumentPath
-      })
-    });
-
-    if (!res.ok) {
-      const errorText = await res.text();
-      console.error(`[PIPELINE] Translate API error (${res.status}):`, errorText);
-      throw new Error(`Failed to start translate operation: ${res.status} ${errorText.substring(0, 200)}`);
+    if (docError || !doc) {
+      throw new Error(`Document not found: ${documentId}`);
     }
 
-    const data = await res.json();
-    const translateJobId = data.jobId;
+    const translateJobId = await createTranslationJob(documentId, {
+      documentId,
+      targetLanguage: translateConfig.targetLanguage,
+      sourceLanguage: translateConfig.sourceLanguage,
+      provider: translateConfig.provider,
+      model: translateConfig.model,
+      maxPages: translateConfig.maxPages,
+      sourceDocumentPath
+    });
     console.log(`[PIPELINE] Translate job created: ${translateJobId}`);
 
-    // Wait for translate job to complete (poll)
-    await this.waitForJobCompletion('translate', translateJobId);
+    // Run translation in-process (no fetch)
+    await executeTranslation(translateJobId, documentId, doc, {
+      documentId,
+      targetLanguage: translateConfig.targetLanguage,
+      sourceLanguage: translateConfig.sourceLanguage,
+      provider: translateConfig.provider,
+      model: translateConfig.model,
+      maxPages: translateConfig.maxPages,
+      sourceDocumentPath
+    });
 
-    // Get translation job details
     const translationJob = await this.getTranslationJob(translateJobId);
 
     if (!translationJob.output_path) {
@@ -629,6 +630,7 @@ export class PipelineEngine {
 
   /**
    * Wait for a sub-job to complete (poll until done)
+   * For translate we poll Supabase directly to avoid "fetch failed" when server calls its own URL (e.g. on Railway).
    */
   private async waitForJobCompletion(operation: string, jobId: string): Promise<void> {
     const maxWaitTime = 30 * 60 * 1000; // 30 minutes max
@@ -636,7 +638,10 @@ export class PipelineEngine {
     const startTime = Date.now();
 
     while (Date.now() - startTime < maxWaitTime) {
-      const job = await this.getJobStatus(operation, jobId);
+      const job =
+        operation === 'translate'
+          ? await this.getTranslationJob(jobId)
+          : await this.getJobStatus(operation, jobId);
 
       if (job.status === 'completed') {
         return;

@@ -1,13 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { translateDocx } from '@/lib/translation/docx-translator';
-import { TranslationOptions, SupportedLanguage } from '@/lib/translation/types';
+import { SupportedLanguage } from '@/lib/translation/types';
 import { AIProvider } from '@/lib/ai/types';
 import { supabase } from '@/lib/supabase';
-import { ensureDocumentInMemory } from '@/lib/document-loader';
-import { randomUUID } from 'crypto';
-import fs from 'fs/promises';
-import path from 'path';
-import os from 'os';
+import { createTranslationJob, executeTranslation } from '@/lib/translation/run-translation';
 
 // POST /api/translate/[id] - Inicia tradução
 export async function POST(
@@ -31,7 +26,22 @@ export async function POST(
       );
     }
 
-    const body = await req.json();
+    let body: {
+      targetLanguage?: SupportedLanguage;
+      sourceLanguage?: SupportedLanguage;
+      provider?: AIProvider;
+      model?: string;
+      maxPages?: number;
+      sourceDocumentPath?: string;
+    };
+    try {
+      body = await req.json();
+    } catch {
+      return NextResponse.json(
+        { error: 'Invalid JSON body' },
+        { status: 400 }
+      );
+    }
     const {
       targetLanguage,
       sourceLanguage,
@@ -39,13 +49,6 @@ export async function POST(
       model,
       maxPages,
       sourceDocumentPath // Optional: for pipeline usage
-    }: {
-      targetLanguage: SupportedLanguage;
-      sourceLanguage?: SupportedLanguage;
-      provider: AIProvider;
-      model: string;
-      maxPages?: number;
-      sourceDocumentPath?: string;
     } = body;
 
     if (!targetLanguage || !provider || !model) {
@@ -55,30 +58,26 @@ export async function POST(
       );
     }
 
-    // Cria job de tradução no Supabase
-    const jobId = randomUUID();
-    const { error: jobError } = await supabase.from('translation_jobs').insert({
-      id: jobId,
-      document_id: documentId,
-      target_language: targetLanguage,
-      source_language: sourceLanguage || null,
+    const jobId = await createTranslationJob(documentId, {
+      documentId,
+      targetLanguage,
+      sourceLanguage,
       provider,
       model,
-      status: 'pending',
-      total_chunks: 0,
-      started_at: new Date().toISOString()
+      maxPages,
+      sourceDocumentPath
     });
 
-    if (jobError) {
-      console.error('[TRANSLATE] Failed to create job:', jobError);
-      return NextResponse.json(
-        { error: 'Failed to create translation job' },
-        { status: 500 }
-      );
-    }
-
-    // Executa tradução em background
-    executeTranslation(jobId, documentId, doc, targetLanguage, sourceLanguage, provider, model, maxPages, sourceDocumentPath);
+    // Executa tradução em background (fire-and-forget)
+    executeTranslation(jobId, documentId, doc, {
+      documentId,
+      targetLanguage,
+      sourceLanguage,
+      provider,
+      model,
+      maxPages,
+      sourceDocumentPath
+    }).catch((err) => console.error('[TRANSLATE] Background job error:', err));
 
     return NextResponse.json({
       jobId,
@@ -92,115 +91,6 @@ export async function POST(
       { error: error.message },
       { status: 500 }
     );
-  }
-}
-
-// Função auxiliar para executar tradução em background
-async function executeTranslation(
-  jobId: string,
-  documentId: string,
-  doc: any,
-  targetLanguage: SupportedLanguage,
-  sourceLanguage: SupportedLanguage | undefined,
-  provider: AIProvider,
-  model: string,
-  maxPages?: number,
-  sourceDocumentPath?: string
-) {
-  const tempDir = os.tmpdir();
-  const tempInputPath = sourceDocumentPath || path.join(tempDir, `${documentId}_input.docx`);
-  const tempOutputPath = path.join(tempDir, `${documentId}_output_${targetLanguage}.docx`);
-
-  try {
-    if (!sourceDocumentPath) {
-      // Standalone mode - download from Storage
-      console.log('[TRANSLATE] Downloading original from Storage:', doc.file_path);
-      const { data: fileBlob, error: downloadError } = await supabase.storage
-        .from('documents')
-        .download(doc.file_path);
-
-      if (downloadError || !fileBlob) {
-        throw new Error(`Failed to download: ${downloadError?.message}`);
-      }
-
-      // Salva temporariamente para processar
-      const buffer = Buffer.from(await fileBlob.arrayBuffer());
-      await fs.writeFile(tempInputPath, buffer);
-    } else {
-      // Pipeline mode - use provided path
-      console.log('[TRANSLATE] Using source document from pipeline:', sourceDocumentPath);
-    }
-
-    // 2. Traduz documento
-    const options: TranslationOptions = {
-      targetLanguage,
-      sourceLanguage,
-      provider,
-      model,
-      maxPages, // Limit pages if specified
-      onProgress: async (progress) => {
-        await supabase.from('translation_jobs').update({
-          status: progress.status,
-          progress_percentage: progress.percentage,
-          current_chunk: progress.currentChunk,
-          total_chunks: progress.totalChunks,
-          current_section: progress.currentSection || null,
-          estimated_seconds_remaining: progress.estimatedSecondsRemaining || null,
-          elapsed_seconds: progress.elapsedSeconds || null,
-          stats: progress.stats || null
-        }).eq('id', jobId);
-      },
-      onLog: (message) => {
-        console.log(`[TRANSLATE ${jobId}] ${message}`);
-      }
-    };
-
-    const result = await translateDocx(tempInputPath, tempOutputPath, options);
-
-    if (!result.success) {
-      throw new Error(result.error || 'Translation failed');
-    }
-
-    // 3. Upload arquivo traduzido para Storage
-    const outputFileName = `${path.parse(doc.file_path).name}_${targetLanguage}.docx`;
-    const storagePath = `translations/${outputFileName}`;
-    const translatedBuffer = await fs.readFile(tempOutputPath);
-
-    console.log('[TRANSLATE] Uploading translated file to Storage:', storagePath);
-    const { error: uploadError } = await supabase.storage
-      .from('translations')
-      .upload(storagePath, translatedBuffer, {
-        contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        upsert: true
-      });
-
-    if (uploadError) {
-      throw new Error(`Failed to upload: ${uploadError.message}`);
-    }
-
-    // 4. Atualiza job como concluído
-    await supabase.from('translation_jobs').update({
-      status: 'completed',
-      progress_percentage: 100,
-      output_path: storagePath,
-      stats: result.validationReport || null,
-      completed_at: new Date().toISOString()
-    }).eq('id', jobId);
-
-    console.log('[TRANSLATE] Translation completed successfully:', jobId);
-
-  } catch (error: any) {
-    console.error('[TRANSLATE] Translation failed:', error);
-    await supabase.from('translation_jobs').update({
-      status: 'error',
-      error_message: error.message
-    }).eq('id', jobId);
-  } finally {
-    // Limpa arquivos temporários
-    try {
-      await fs.unlink(tempInputPath);
-      await fs.unlink(tempOutputPath);
-    } catch {}
   }
 }
 
