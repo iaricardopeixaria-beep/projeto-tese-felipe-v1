@@ -4,6 +4,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
 import { randomUUID } from 'crypto';
+import { applySuggestionsToDocx, type ApplyDocxSuggestion } from '@/lib/translation/docx-translator';
 
 export async function POST(
   req: NextRequest,
@@ -36,6 +37,13 @@ export async function POST(
       return NextResponse.json(
         { error: 'Job not found' },
         { status: 404 }
+      );
+    }
+
+    if (job.status !== 'completed') {
+      return NextResponse.json(
+        { error: 'Job not completed yet' },
+        { status: 400 }
       );
     }
 
@@ -83,12 +91,29 @@ export async function POST(
 
     console.log(`[APPLY-API] Applying ${acceptedSuggestions.length} accepted suggestions`);
 
-    // TODO: Implementar aplicação real das sugestões no documento DOCX
-    // Por enquanto, copia o arquivo original
-    await fs.copyFile(sourcePath, outputPath);
+    // Aplica as sugestões no DOCX (substitui originalText -> improvedText)
+    const suggestionsForDocx: ApplyDocxSuggestion[] = acceptedSuggestions.map((s: any) => ({
+      id: s.id,
+      originalText: s.originalText || '',
+      improvedText: s.improvedText || ''
+    }));
+
+    const applyResult = await applySuggestionsToDocx(sourcePath, outputPath, suggestionsForDocx);
+    console.log('[APPLY-API] DOCX apply result:', applyResult);
+
+    // Descobre thesis_id para padronizar path no Storage
+    const { data: chapter, error: chapterError } = await supabase
+      .from('chapters')
+      .select('thesis_id')
+      .eq('id', chapterId)
+      .single();
+
+    if (chapterError || !chapter) {
+      throw new Error('Chapter not found');
+    }
 
     // Faz upload do novo arquivo
-    const newFileName = `${chapterId}/${randomUUID()}.docx`;
+    const newFileName = `theses/${chapter.thesis_id}/chapters/${chapterId}/${randomUUID()}.docx`;
     const outputBuffer = await fs.readFile(outputPath);
 
     const { error: uploadError } = await supabase.storage
@@ -112,7 +137,9 @@ export async function POST(
       p_metadata: {
         acceptedSuggestions: acceptedSuggestions.length,
         totalSuggestions: allSuggestions.length,
-        appliedIds: acceptedSuggestionIds
+        appliedIds: acceptedSuggestionIds,
+        appliedFromJobId: jobId,
+        applyResult
       }
     });
 
@@ -136,7 +163,8 @@ export async function POST(
     return NextResponse.json({
       success: true,
       newVersionId,
-      appliedCount: acceptedSuggestions.length
+      appliedCount: acceptedSuggestions.length,
+      unmatchedCount: applyResult.unmatchedCount
     });
 
   } catch (error: any) {

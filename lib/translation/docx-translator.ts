@@ -5,6 +5,13 @@ import path from 'path';
 import { TranslationOptions, TextElement, TranslationResult, TranslationProgress } from './types';
 import { translateTextDirect } from './translate-direct';
 
+function normalizeForMatch(text: string): string {
+  return (text || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 /**
  * Extrai todos os textos de um arquivo DOCX preservando estrutura XML
  */
@@ -906,6 +913,79 @@ async function replaceTextsInXml(
 
   // Atualiza o arquivo no ZIP
   zip.file(xmlPath, newXmlContent);
+}
+
+export type ApplyDocxSuggestion = {
+  id?: string;
+  originalText: string;
+  improvedText: string;
+};
+
+/**
+ * Applies accepted suggestion replacements to a DOCX by replacing whole extracted text elements.
+ * This is used when the UI lets the user confirm/reject suggestions before generating a new version.
+ */
+export async function applySuggestionsToDocx(
+  inputPath: string,
+  outputPath: string,
+  acceptedSuggestions: ApplyDocxSuggestion[]
+): Promise<{ appliedCount: number; unmatchedCount: number }> {
+  const { zip, textElements } = await extractTextsFromDocx(inputPath);
+
+  const index = new Map<string, TextElement[]>();
+  for (const el of textElements) {
+    const key = normalizeForMatch(el.originalText);
+    if (!key) continue;
+    const list = index.get(key);
+    if (list) list.push(el);
+    else index.set(key, [el]);
+  }
+
+  let appliedCount = 0;
+  let unmatchedCount = 0;
+
+  // Track how many times we've used a given normalized key (handles repeated paragraphs safely).
+  const usedOffsets = new Map<string, number>();
+
+  for (const sug of acceptedSuggestions) {
+    const key = normalizeForMatch(sug.originalText);
+    if (!key) {
+      unmatchedCount++;
+      continue;
+    }
+    const candidates = index.get(key);
+    if (!candidates || candidates.length === 0) {
+      unmatchedCount++;
+      continue;
+    }
+
+    const offset = usedOffsets.get(key) ?? 0;
+    const candidate = candidates[offset];
+    if (!candidate) {
+      unmatchedCount++;
+      continue;
+    }
+
+    candidate.translatedText = sug.improvedText;
+    usedOffsets.set(key, offset + 1);
+    appliedCount++;
+  }
+
+  // Replace in each XML section
+  const elementsByXml = new Map<string, TextElement[]>();
+  for (const el of textElements) {
+    if (!elementsByXml.has(el.xmlPath)) elementsByXml.set(el.xmlPath, []);
+    elementsByXml.get(el.xmlPath)!.push(el);
+  }
+
+  for (const [xmlPath, elements] of elementsByXml.entries()) {
+    await replaceTextsInXml(zip, xmlPath, elements);
+  }
+
+  const buffer = await zip.generateAsync({ type: 'nodebuffer' });
+  await fs.writeFile(outputPath, buffer);
+
+  return { appliedCount, unmatchedCount };
 }
 
 /**
