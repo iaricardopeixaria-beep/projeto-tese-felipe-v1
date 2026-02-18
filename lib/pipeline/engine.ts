@@ -485,8 +485,9 @@ export class PipelineEngine {
     const buffer = Buffer.from(await fileBlob.arrayBuffer());
     await fs.writeFile(tempPath, buffer);
 
-
-    // TODO: Implement translate operation logic
+    // Translation is complete - document is saved to temp path
+    // The saveIntermediateDocument method will be called automatically by the pipeline executor
+    // to upload it to pipeline-outputs storage and save metadata
     return {
       operation: 'translate',
       operationIndex: context.currentOperationIndex,
@@ -496,7 +497,9 @@ export class PipelineEngine {
       metadata: {
         items_processed: translationJob.total_chunks || 0,
         progress_percentage: translationJob.progress_percentage || 0,
-        output_path: translationJob.output_path
+        output_path: translationJob.output_path,
+        target_language: translateConfig.targetLanguage,
+        source_language: translateConfig.sourceLanguage
       },
       completedAt: new Date().toISOString()
     };
