@@ -16,6 +16,7 @@ import { createTranslationJob, executeTranslation } from '@/lib/translation/run-
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
+import { randomUUID } from 'crypto';
 
 // ============================================
 // Custom Errors
@@ -370,64 +371,113 @@ export class PipelineEngine {
   private async executeAdapt(context: PipelineExecutionContext): Promise<OperationResult> {
     const { config, sourceDocumentPath, documentId } = context;
 
-    // Call adapt API to generate suggestions
+    // Call adapt operation directly to avoid self-fetch issues (Railway/Vercel)
     const adaptConfig = config as any;
-    const apiUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3001';
-    const url = `${apiUrl}/api/adapt`;
+    
+    console.log(`[PIPELINE] Starting adapt operation directly (avoiding self-fetch)`);
 
-    console.log(`[PIPELINE] Calling adapt API: ${url}`);
-
-    let res: Response;
-    try {
-      res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          documentId,
-          sourceDocumentPath,
-          style: adaptConfig.style,
-          targetAudience: adaptConfig.targetAudience,
-          provider: adaptConfig.provider,
-          model: adaptConfig.model
-        }),
-        signal: AbortSignal.timeout(30000) // 30 second timeout
+    // Import and call the adapt processor directly
+    const { analyzeDocumentForAdaptation } = await import('@/lib/adapt/processor');
+    const { extractDocumentStructure } = await import('@/lib/improvement/document-analyzer');
+    
+    // Create adapt job in database
+    const adaptJobId = randomUUID();
+    const { error: jobError } = await supabase
+      .from('adapt_jobs')
+      .insert({
+        id: adaptJobId,
+        document_id: documentId || null,
+        status: 'pending',
+        style: adaptConfig.style,
+        target_audience: adaptConfig.targetAudience || null,
+        provider: adaptConfig.provider,
+        model: adaptConfig.model
       });
-    } catch (fetchError: any) {
-      console.error(`[PIPELINE] Fetch error calling adapt API:`, fetchError);
-      throw new Error(`Failed to connect to adapt API: ${fetchError.message || 'Network error'}. URL: ${url}`);
+
+    if (jobError) {
+      throw new Error(`Failed to create adapt job: ${jobError.message}`);
     }
 
-    if (!res.ok) {
-      const errorText = await res.text();
-      console.error(`[PIPELINE] Adapt API error (${res.status}):`, errorText);
-      throw new Error(`Failed to start adapt operation: ${res.status} ${errorText.substring(0, 200)}`);
-    }
-
-    const data = await res.json();
-    const adaptJobId = data.jobId;
     console.log(`[PIPELINE] Adapt job created: ${adaptJobId}`);
 
-    // Wait for adapt job to complete (poll)
-    await this.waitForJobCompletion('adapt', adaptJobId);
+    // Update status to adapting
+    await supabase
+      .from('adapt_jobs')
+      .update({ status: 'adapting', started_at: new Date().toISOString() })
+      .eq('id', adaptJobId);
 
-    // Get results
-    const adaptJob = await this.getAdaptJob(adaptJobId);
+    // Extract document structure
+    const { structure, paragraphs } = await extractDocumentStructure(sourceDocumentPath);
 
-    return {
-      operation: 'adapt',
-      operationIndex: context.currentOperationIndex,
-      status: 'awaiting_approval',
-      outputDocumentPath: sourceDocumentPath, // Keep original until approved
-      operationJobId: adaptJobId,
-      requiresApproval: true,
-      approvalStatus: 'pending',
-      metadata: {
-        items_generated: adaptJob.suggestions?.length || 0,
-        style: adaptConfig.style,
-        targetAudience: adaptConfig.targetAudience
-      },
-      completedAt: new Date().toISOString()
-    };
+    // Update job with structure
+    await supabase
+      .from('adapt_jobs')
+      .update({
+        document_structure: structure,
+        total_sections: structure.sections.length
+      })
+      .eq('id', adaptJobId);
+
+    // Get API key
+    const apiKey = adaptConfig.provider === 'openai'
+      ? process.env.OPENAI_API_KEY!
+      : adaptConfig.provider === 'gemini'
+      ? (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)!
+      : process.env.GROK_API_KEY!;
+
+    try {
+      // Generate adaptation suggestions directly
+      const suggestions = await analyzeDocumentForAdaptation(
+        sourceDocumentPath,
+        adaptConfig.style,
+        adaptConfig.targetAudience,
+        adaptConfig.provider,
+        adaptConfig.model,
+        apiKey
+      );
+
+      console.log(`[PIPELINE] Generated ${suggestions.length} adaptation suggestions`);
+
+      // Save suggestions to database
+      await supabase
+        .from('adapt_jobs')
+        .update({
+          status: 'completed',
+          suggestions: suggestions,
+          completed_at: new Date().toISOString()
+        })
+        .eq('id', adaptJobId);
+
+      // Get results
+      const adaptJob = await this.getAdaptJob(adaptJobId);
+
+      return {
+        operation: 'adapt',
+        operationIndex: context.currentOperationIndex,
+        status: 'awaiting_approval',
+        outputDocumentPath: sourceDocumentPath, // Keep original until approved
+        operationJobId: adaptJobId,
+        requiresApproval: true,
+        approvalStatus: 'pending',
+        metadata: {
+          items_generated: adaptJob.suggestions?.length || 0,
+          style: adaptConfig.style,
+          targetAudience: adaptConfig.targetAudience
+        },
+        completedAt: new Date().toISOString()
+      };
+    } catch (error: any) {
+      console.error(`[PIPELINE] Error in adapt operation:`, error);
+      // Update job status to error
+      await supabase
+        .from('adapt_jobs')
+        .update({
+          status: 'error',
+          error_message: error.message || 'Unknown error'
+        })
+        .eq('id', adaptJobId);
+      throw error;
+    }
   }
 
   /**
