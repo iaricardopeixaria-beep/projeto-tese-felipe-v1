@@ -4,7 +4,9 @@ import JSZip from 'jszip';
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
+import { randomUUID } from 'crypto';
 import { NormReference } from '@/lib/norms-update/types';
+import { parseChapterNormsJobId } from '@/lib/norms-update/constants';
 
 // POST /api/norms-update/[id]/apply - Aplica atualizações aceitas
 export async function POST(
@@ -22,7 +24,6 @@ export async function POST(
       );
     }
 
-    // Busca job no Supabase
     const { data: job, error: jobError } = await supabase
       .from('norm_update_jobs')
       .select('*')
@@ -36,7 +37,99 @@ export async function POST(
       );
     }
 
-    // Busca documento original
+    const allReferences: NormReference[] = job.norm_references || [];
+    const acceptedReferences = allReferences.filter(r =>
+      acceptedReferenceIds.includes(r.id)
+    );
+
+    console.log(`[NORMS-APPLY] Applying ${acceptedReferences.length} updates`);
+
+    const chapterSource = parseChapterNormsJobId(job.document_id);
+
+    if (chapterSource) {
+      const { chapterId, versionId } = chapterSource;
+      const { data: version, error: versionError } = await supabase
+        .from('chapter_versions')
+        .select('id, file_path, chapter_id')
+        .eq('id', versionId)
+        .eq('chapter_id', chapterId)
+        .single();
+
+      if (versionError || !version) {
+        return NextResponse.json(
+          { error: 'Versão do capítulo não encontrada' },
+          { status: 404 }
+        );
+      }
+
+      const { data: fileBlob, error: downloadError } = await supabase.storage
+        .from('documents')
+        .download(version.file_path);
+
+      if (downloadError || !fileBlob) {
+        return NextResponse.json(
+          { error: 'Falha ao baixar arquivo do capítulo' },
+          { status: 500 }
+        );
+      }
+
+      const tempDir = os.tmpdir();
+      const tempInputPath = path.join(tempDir, `${jobId}_ch_original.docx`);
+      const tempOutputPath = path.join(tempDir, `${jobId}_ch_updated.docx`);
+      await fs.writeFile(tempInputPath, Buffer.from(await fileBlob.arrayBuffer()));
+
+      await applyNormUpdatesToDocx(tempInputPath, tempOutputPath, acceptedReferences);
+
+      const { data: chapter } = await supabase
+        .from('chapters')
+        .select('thesis_id')
+        .eq('id', chapterId)
+        .single();
+
+      const newFileName = `theses/${chapter?.thesis_id || 'unknown'}/chapters/${chapterId}/${randomUUID()}.docx`;
+      const outputBuffer = await fs.readFile(tempOutputPath);
+
+      const { error: uploadError } = await supabase.storage
+        .from('documents')
+        .upload(newFileName, outputBuffer, {
+          contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          upsert: false
+        });
+
+      await fs.unlink(tempInputPath).catch(() => {});
+      await fs.unlink(tempOutputPath).catch(() => {});
+
+      if (uploadError) {
+        return NextResponse.json(
+          { error: `Falha ao enviar arquivo: ${uploadError.message}` },
+          { status: 500 }
+        );
+      }
+
+      const { data: newVersionId, error: rpcError } = await supabase.rpc('create_chapter_version', {
+        p_chapter_id: chapterId,
+        p_file_path: newFileName,
+        p_parent_version_id: versionId,
+        p_created_by_operation: 'norms-update',
+        p_metadata: { appliedNormIds: acceptedReferenceIds, normsJobId: jobId }
+      });
+
+      if (rpcError) {
+        return NextResponse.json(
+          { error: `Falha ao criar nova versão: ${rpcError.message}` },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        chapterId,
+        newVersionId,
+        message: 'Normas aplicadas. Nova versão do capítulo criada.'
+      });
+    }
+
+    // Fluxo documento (projeto)
     const { data: doc, error: docError } = await supabase
       .from('documents')
       .select('*')
@@ -50,15 +143,6 @@ export async function POST(
       );
     }
 
-    // Filtra apenas referências aceitas
-    const allReferences: NormReference[] = job.norm_references || [];
-    const acceptedReferences = allReferences.filter(r =>
-      acceptedReferenceIds.includes(r.id)
-    );
-
-    console.log(`[NORMS-APPLY] Applying ${acceptedReferences.length} updates`);
-
-    // Download arquivo original
     const { data: fileBlob, error: downloadError } = await supabase.storage
       .from('documents')
       .download(doc.file_path);
@@ -74,23 +158,19 @@ export async function POST(
     const buffer = Buffer.from(await fileBlob.arrayBuffer());
     await fs.writeFile(tempInputPath, buffer);
 
-    // Aplica atualizações
     await applyNormUpdatesToDocx(
       tempInputPath,
       tempOutputPath,
       acceptedReferences
     );
 
-    // Retorna arquivo atualizado
     const updatedBuffer = await fs.readFile(tempOutputPath);
 
-    // Limpa arquivos temporários
     try {
       await fs.unlink(tempInputPath);
       await fs.unlink(tempOutputPath);
     } catch {}
 
-    // Sanitize filename
     const sanitizedTitle = (doc.title || 'documento')
       .replace(/[^a-zA-Z0-9_-]/g, '_')
       .substring(0, 50);

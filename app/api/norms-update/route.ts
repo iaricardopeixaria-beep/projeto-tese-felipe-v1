@@ -180,8 +180,8 @@ async function processNormsUpdate(
       return;
     }
 
-    // Verifica status de cada norma (Gemini usa Google Search automaticamente)
-    console.log('[NORMS] Verifying norm statuses with Gemini + Google Search...');
+    // Verifica status: primeiro LexML/Senado (fontes oficiais), depois IA se necessário
+    console.log('[NORMS] Verifying norm statuses (official sources + Gemini/OpenAI)...');
 
     const verifiedReferences = await verifyMultipleNorms(
       references,

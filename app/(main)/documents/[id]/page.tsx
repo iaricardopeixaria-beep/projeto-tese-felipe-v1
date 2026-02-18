@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { AnswerCompareGrid } from '@/components/answer-compare-grid';
 import { PipelineWizard } from '@/components/pipeline-wizard';
+import { UpdateNormsButton } from '@/components/update-norms-button';
 import { toast } from 'sonner';
 import {
   FileText,
@@ -236,13 +237,16 @@ export default function DocumentPage() {
             <Badge variant="secondary">{document.chunksCount} chunks</Badge>
           </div>
         </div>
-        <Button
-          onClick={() => setPipelineSelectorOpen(true)}
-          className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white shadow-lg shadow-red-500/20"
-        >
-          <Sparkles className="h-4 w-4 mr-2" />
-          Processar Documento
-        </Button>
+        <div className="flex gap-2">
+          <UpdateNormsButton documentId={documentId} documentTitle={document.title} />
+          <Button
+            onClick={() => setPipelineSelectorOpen(true)}
+            className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white shadow-lg shadow-red-500/20"
+          >
+            <Sparkles className="h-4 w-4 mr-2" />
+            Processar Documento
+          </Button>
+        </div>
       </div>
 
       {(translations.length > 0 || pipelineJobs.length > 0) && (

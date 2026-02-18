@@ -21,6 +21,7 @@ import {
 import Link from 'next/link';
 import { NormReference } from '@/lib/norms-update/types';
 import { getAIErrorMessage } from '@/lib/ai-error-message';
+import { parseChapterNormsJobId } from '@/lib/norms-update/constants';
 
 type NormUpdateJob = {
   jobId: string;
@@ -170,7 +171,18 @@ export default function NormUpdatePage() {
         throw new Error(error.error || 'Falha ao aplicar atualizações');
       }
 
-      // Download do arquivo
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        const data = await res.json();
+        if (data.chapterId && data.newVersionId) {
+          toast.dismiss();
+          toast.success('Normas aplicadas! Nova versão do capítulo criada.');
+          router.push(`/chapters/${data.chapterId}/versions/${data.newVersionId}`);
+          return;
+        }
+      }
+
+      // Download do arquivo (documento de projeto)
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -212,12 +224,18 @@ export default function NormUpdatePage() {
     );
   }
 
+  const chapterSource = parseChapterNormsJobId(job.documentId);
+  const backHref = chapterSource
+    ? `/chapters/${chapterSource.chapterId}/versions/${chapterSource.versionId}`
+    : `/documents/${job.documentId}`;
+  const backLabel = chapterSource ? 'Voltar ao capítulo' : 'Voltar ao documento';
+
   // Still analyzing
   if (job.status === 'analyzing' || job.status === 'pending') {
     return (
       <div className="space-y-6">
         <div className="flex items-center gap-4">
-          <Link href={`/documents/${job.documentId}`}>
+          <Link href={backHref}>
             <Button variant="outline" size="icon">
               <ArrowLeft className="h-4 w-4" />
             </Button>
@@ -257,7 +275,7 @@ export default function NormUpdatePage() {
     return (
       <div className="space-y-6">
         <div className="flex items-center gap-4">
-          <Link href={`/documents/${job.documentId}`}>
+          <Link href={backHref}>
             <Button variant="outline" size="icon">
               <ArrowLeft className="h-4 w-4" />
             </Button>
@@ -271,13 +289,13 @@ export default function NormUpdatePage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-red-600">
               <XCircle className="h-5 w-5" />
-              Erro ao Analisar Documento
+              Erro ao Analisar {chapterSource ? 'Capítulo' : 'Documento'}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-muted-foreground">{getAIErrorMessage(job.error || 'Erro desconhecido')}</p>
-            <Button className="mt-4" onClick={() => router.push(`/documents/${job.documentId}`)}>
-              Voltar ao Documento
+            <Button className="mt-4" onClick={() => router.push(backHref)}>
+              {backLabel}
             </Button>
           </CardContent>
         </Card>
@@ -295,7 +313,7 @@ export default function NormUpdatePage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-4">
-        <Link href={`/documents/${job.documentId}`}>
+        <Link href={backHref}>
           <Button variant="outline" size="icon">
             <ArrowLeft className="h-4 w-4" />
           </Button>

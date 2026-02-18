@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, FileText, Clock, Layers, Download, Info, Sparkles, Languages, Sliders, Wand2, RefreshCw } from 'lucide-react';
+import { ArrowLeft, FileText, Clock, Layers, Download, Info, Sparkles, Languages, Sliders, Wand2, RefreshCw, SearchCheck, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Dialog,
@@ -67,6 +67,9 @@ export default function ChapterVersionPage() {
   const [adjustDialogOpen, setAdjustDialogOpen] = useState(false);
   const [adaptDialogOpen, setAdaptDialogOpen] = useState(false);
   const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
+  const [revisarDialogOpen, setRevisarDialogOpen] = useState(false);
+  const [revisarAtualizarNormas, setRevisarAtualizarNormas] = useState(false);
+  const [revisarLoading, setRevisarLoading] = useState(false);
   const [targetLanguage, setTargetLanguage] = useState<string>('');
   const [processing, setProcessing] = useState(false);
 
@@ -428,6 +431,36 @@ export default function ChapterVersionPage() {
       console.error('[UPDATE] Error:', error);
       toast.error(error.message || 'Erro ao iniciar atualização');
       setProcessing(false);
+    }
+  };
+
+  const handleRevisar = async () => {
+    if (!revisarAtualizarNormas) {
+      toast.info('Marque pelo menos uma opção de revisão (ex.: Atualizar normas)');
+      return;
+    }
+    try {
+      setRevisarLoading(true);
+      toast.loading('Iniciando análise de normas...');
+      const res = await fetch(`/api/chapters/${chapterId}/versions/${versionId}/norms-update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider: 'gemini', model: 'gemini-2.5-flash' })
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Falha ao iniciar análise de normas');
+      }
+      const data = await res.json();
+      setRevisarDialogOpen(false);
+      toast.dismiss();
+      toast.success('Análise de normas iniciada!');
+      router.push(`/norms-update/${data.jobId}`);
+    } catch (error: any) {
+      toast.dismiss();
+      toast.error(error.message || 'Erro ao iniciar revisão');
+    } finally {
+      setRevisarLoading(false);
     }
   };
 
@@ -1025,6 +1058,62 @@ export default function ChapterVersionPage() {
                     disabled={processing || (adaptStyle === 'custom' && !adaptTargetAudience.trim())}
                   >
                     {processing ? 'Processando...' : 'Iniciar Adaptação'}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            {/* Revisar (opção Atualizar normas - igual a documentos) */}
+            <Dialog open={revisarDialogOpen} onOpenChange={setRevisarDialogOpen}>
+              <DialogTrigger asChild>
+                <Button
+                  variant="outline"
+                  className="w-full justify-start"
+                >
+                  <SearchCheck className="h-4 w-4 mr-2" />
+                  Revisar
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <SearchCheck className="h-5 w-5" />
+                    Revisar Capítulo
+                  </DialogTitle>
+                  <DialogDescription>
+                    Escolha as opções de revisão antes de considerar a versão final. Igual ao fluxo em documentos.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="flex items-start space-x-3 p-3 rounded-lg border bg-muted/50">
+                    <Checkbox
+                      id="revisar-normas"
+                      checked={revisarAtualizarNormas}
+                      onCheckedChange={(c) => setRevisarAtualizarNormas(!!c)}
+                    />
+                    <div className="space-y-1 flex-1">
+                      <Label htmlFor="revisar-normas" className="text-sm font-medium cursor-pointer">
+                        Atualizar normas
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        Verificar se leis e normas citadas seguem vigentes (LexML/Senado + IA). Pode aplicar alterações aprovadas e criar nova versão.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="ghost" onClick={() => setRevisarDialogOpen(false)} disabled={revisarLoading}>
+                    Cancelar
+                  </Button>
+                  <Button onClick={handleRevisar} disabled={revisarLoading || !revisarAtualizarNormas}>
+                    {revisarLoading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Iniciando...
+                      </>
+                    ) : (
+                      'Iniciar revisão'
+                    )}
                   </Button>
                 </DialogFooter>
               </DialogContent>

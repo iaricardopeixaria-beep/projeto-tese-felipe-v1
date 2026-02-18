@@ -321,12 +321,11 @@ export class PipelineEngine {
   private async executeUpdate(context: PipelineExecutionContext): Promise<OperationResult> {
     const { config, sourceDocumentPath, documentId } = context;
 
-    // Call norms-update operation directly to avoid self-fetch issues (Railway/Vercel)
+    // Call norms-update operation directly (LexML/Senado first, then IA)
     const updateConfig = config as any;
     
-    console.log(`[PIPELINE] Starting norms-update operation directly (avoiding self-fetch)`);
+    console.log(`[PIPELINE] Starting norms-update (official sources + IA)...`);
 
-    // Import and call the norms-update processor directly
     const { extractDocumentStructure } = await import('@/lib/improvement/document-analyzer');
     const { detectNormsInDocument } = await import('@/lib/norms-update/norm-detector');
     const { verifyMultipleNorms } = await import('@/lib/norms-update/norm-verifier');
