@@ -255,19 +255,37 @@ Retorne APENAS um JSON válido no formato:
 
     response = completion.choices[0]?.message?.content?.trim() || '{}';
   } else {
-    // Gemini
+    // Gemini with 429 retry
     const { GoogleGenerativeAI } = await import('@google/generative-ai');
+    const { isGemini429, parseGeminiRetryDelayMs, sleep } = await import('@/lib/ai/gemini-retry');
     const genAI = new GoogleGenerativeAI(apiKey);
     const geminiModel = genAI.getGenerativeModel({
       model,
       generationConfig: {
         temperature: 0.3,
-        maxOutputTokens: 8192 // Aumentado para máximo do Gemini (permite análises muito detalhadas)
+        maxOutputTokens: 8192
       }
     });
-
-    const result = await geminiModel.generateContent(prompt);
-    response = result.response.text().trim();
+    const maxRetries = 4;
+    let lastErr: any;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const result = await geminiModel.generateContent(prompt);
+        response = result.response.text().trim();
+        lastErr = undefined;
+        break;
+      } catch (err: any) {
+        lastErr = err;
+        if (isGemini429(err) && attempt < maxRetries) {
+          const delayMs = parseGeminiRetryDelayMs(err);
+          console.warn(`[DOC-ANALYZER] Gemini 429 (tentativa ${attempt}/${maxRetries}), aguardando ${(delayMs / 1000).toFixed(1)}s...`);
+          await sleep(delayMs);
+        } else {
+          throw err;
+        }
+      }
+    }
+    if (lastErr) throw lastErr;
   }
 
   // Parse JSON response

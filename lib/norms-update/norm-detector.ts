@@ -1,4 +1,5 @@
 import { NormReference, NormType } from './types';
+import { isGemini429, parseGeminiRetryDelayMs, sleep } from '@/lib/ai/gemini-retry';
 import { randomUUID } from 'crypto';
 
 /**
@@ -92,31 +93,47 @@ Retorne APENAS o JSON.`;
 
         response = completion.choices[0]?.message?.content?.trim() || '{"references":[]}';
       } else {
-        // Gemini
+        // Gemini with 429 retry
         const { GoogleGenerativeAI } = await import('@google/generative-ai');
         const genAI = new GoogleGenerativeAI(apiKey);
         const geminiModel = genAI.getGenerativeModel({
           model,
           generationConfig: {
             temperature: 0.1,
-            maxOutputTokens: 8192, // Aumentado para máximo do Gemini (permite detecções muito detalhadas)
+            maxOutputTokens: 8192
           }
         });
-
-        const result = await geminiModel.generateContent(prompt);
-
+        const maxRetries = 4;
+        let result: Awaited<ReturnType<typeof geminiModel.generateContent>>;
+        let lastErr: any;
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+          try {
+            result = await geminiModel.generateContent(prompt);
+            lastErr = undefined;
+            break;
+          } catch (err: any) {
+            lastErr = err;
+            if (isGemini429(err) && attempt < maxRetries) {
+              const delayMs = parseGeminiRetryDelayMs(err);
+              console.warn(`[NORMS] Gemini 429 (tentativa ${attempt}/${maxRetries}), aguardando ${(delayMs / 1000).toFixed(1)}s...`);
+              await sleep(delayMs);
+            } else {
+              throw err;
+            }
+          }
+        }
+        if (lastErr) throw lastErr;
         // Debug: Verifica se há bloqueios ou problemas
-        const candidate = result.response.candidates?.[0];
+        const candidate = result!.response.candidates?.[0];
         if (candidate?.finishReason && candidate.finishReason !== 'STOP') {
           errors.push({
             batch: Math.floor(i / batchSize) + 1,
             type: 'GEMINI_BLOCKED',
-            details: `finishReason: ${candidate.finishReason}\nfullResponse: ${JSON.stringify(result.response, null, 2)}`
+            details: `finishReason: ${candidate.finishReason}\nfullResponse: ${JSON.stringify(result!.response, null, 2)}`
           });
           continue;
         }
-
-        response = result.response.text().trim();
+        response = result!.response.text().trim();
       }
 
       // Parse JSON response - remove markdown code blocks primeiro

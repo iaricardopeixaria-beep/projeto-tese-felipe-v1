@@ -1,4 +1,5 @@
 import { GlobalContext, ImprovementSuggestion, ImprovementType } from './types';
+import { isGemini429, parseGeminiRetryDelayMs, sleep } from '@/lib/ai/gemini-retry';
 import { randomUUID } from 'crypto';
 
 /**
@@ -74,7 +75,7 @@ IMPORTANTE:
 
 Retorne APENAS o JSON, sem texto adicional.`;
 
-  let response: string;
+  let response = '';
 
   try {
     if (provider === 'openai') {
@@ -91,19 +92,36 @@ Retorne APENAS o JSON, sem texto adicional.`;
 
       response = completion.choices[0]?.message?.content?.trim() || '{"suggestions":[]}';
     } else {
-      // Gemini
+      // Gemini with 429 retry
       const { GoogleGenerativeAI } = await import('@google/generative-ai');
       const genAI = new GoogleGenerativeAI(apiKey);
       const geminiModel = genAI.getGenerativeModel({
         model,
         generationConfig: {
           temperature: 0.3,
-          maxOutputTokens: 8192, // Aumentado para máximo do Gemini (permite respostas muito detalhadas)
+          maxOutputTokens: 8192,
         }
       });
-
-      const result = await geminiModel.generateContent(prompt);
-      response = result.response.text().trim();
+      const maxRetries = 4;
+      let lastErr: any;
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          const result = await geminiModel.generateContent(prompt);
+          response = result.response.text().trim();
+          lastErr = undefined;
+          break;
+        } catch (err: any) {
+          lastErr = err;
+          if (isGemini429(err) && attempt < maxRetries) {
+            const delayMs = parseGeminiRetryDelayMs(err);
+            console.warn(`[IMPROVE] Gemini 429 (tentativa ${attempt}/${maxRetries}), aguardando ${(delayMs / 1000).toFixed(1)}s...`);
+            await sleep(delayMs);
+          } else {
+            throw err;
+          }
+        }
+      }
+      if (lastErr) throw lastErr;
     }
 
     // Parse JSON response

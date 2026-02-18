@@ -2,6 +2,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { ChatRequest, AIResponse } from './types';
 import { buildSystemPrompt, buildUserPrompt, extractCitations } from './prompts';
 import { state } from '../state';
+import { isGemini429, parseGeminiRetryDelayMs, sleep } from './gemini-retry';
 
 export async function executeGemini(
   request: ChatRequest,
@@ -17,10 +18,9 @@ export async function executeGemini(
 
   const fullPrompt = `${systemPrompt}\n\n${userPrompt}`;
 
-  let attempts = 0;
-  const maxAttempts = 2;
+  const maxAttempts = 4;
 
-  while (attempts < maxAttempts) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       const result = await model.generateContent({
         contents: [{ role: 'user', parts: [{ text: fullPrompt }] }],
@@ -54,11 +54,16 @@ export async function executeGemini(
         costEstimatedUsd
       };
     } catch (error: any) {
-      attempts++;
-      if (attempts >= maxAttempts) {
+      if (attempt >= maxAttempts) {
         throw new Error(`Gemini error: ${error.message}`);
       }
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      if (isGemini429(error)) {
+        const delayMs = parseGeminiRetryDelayMs(error);
+        console.warn(`[GEMINI] 429 quota/rate limit (tentativa ${attempt}/${maxAttempts}), aguardando ${(delayMs / 1000).toFixed(1)}s...`);
+        await sleep(delayMs);
+      } else {
+        await sleep(1000);
+      }
     }
   }
 

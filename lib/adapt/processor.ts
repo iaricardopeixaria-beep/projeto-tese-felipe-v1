@@ -5,6 +5,7 @@
 
 import { AdaptationSuggestion } from './types';
 import { extractDocumentStructure } from '@/lib/improvement/document-analyzer';
+import { isGemini429, parseGeminiRetryDelayMs } from '@/lib/ai/gemini-retry';
 import OpenAI from 'openai';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { randomUUID } from 'crypto';
@@ -107,6 +108,10 @@ function isRetryableError(error: any): boolean {
   
   // Check for OpenAI/Grok rate limit or quota errors
   if (error.status === 429 || error.code === 'insufficient_quota' || error.code === 'rate_limit_exceeded') {
+    return true;
+  }
+  // Gemini 429 (message-based)
+  if (error.message?.includes('429') || error.message?.includes('quota') || error.message?.includes('Too Many Requests')) {
     return true;
   }
   
@@ -213,8 +218,9 @@ async function analyzeBatch(
       const isRetryable = isRetryableError(error);
       
       if (isRetryable && attempt < maxRetries) {
+        const delayMs = isGemini429(error) ? parseGeminiRetryDelayMs(error) : retryDelayMs;
         console.warn(`[ADAPT] ⚠️ Erro temporário na tentativa ${attempt}/${maxRetries}: ${error.message || error.code || 'Unknown error'}`);
-        console.log(`[ADAPT]     → Aguardando ${retryDelayMs / 1000}s antes de tentar novamente...`);
+        console.log(`[ADAPT]     → Aguardando ${(delayMs / 1000).toFixed(1)}s antes de tentar novamente...`);
         
         // Save partial progress before retry
         if (onSavePartial) {
@@ -226,8 +232,8 @@ async function analyzeBatch(
           }
         }
         
-        // Wait before retry
-        await new Promise(resolve => setTimeout(resolve, retryDelayMs));
+        // Wait before retry (use API-suggested delay for Gemini 429)
+        await new Promise(resolve => setTimeout(resolve, delayMs));
         continue; // Try again
       } else {
         // Not retryable or max retries reached

@@ -2,6 +2,7 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import OpenAI from 'openai';
 import { AIProvider } from '../ai/types';
 import { state } from '../state';
+import { isGemini429, parseGeminiRetryDelayMs, sleep } from '../ai/gemini-retry';
 import { protectElements, restoreElements, validatePlaceholders } from './validation-enhancer';
 import { protectGlossaryTerms, restoreGlossaryTerms, DEFAULT_GLOSSARY, type GlossaryEntry } from './glossary';
 
@@ -138,8 +139,10 @@ async function translateWithGemini(prompt: string, model: string, maxTokens: num
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
       if (attempt > 0) {
-        const delayMs = 5000; // 5s on retry (timeout/rate limit)
-        console.log(`[GEMINI] ⏳ Retry ${attempt}/${maxRetries} after ${delayMs}ms delay...`);
+        const delayMs = lastError && isGemini429(lastError)
+          ? parseGeminiRetryDelayMs(lastError)
+          : 5000;
+        console.log(`[GEMINI] ⏳ Retry ${attempt}/${maxRetries} after ${(delayMs / 1000).toFixed(1)}s...`);
         await sleep(delayMs);
       }
 

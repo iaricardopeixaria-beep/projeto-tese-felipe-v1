@@ -1,4 +1,5 @@
 import { NormReference, NormStatus, UpdateType } from './types';
+import { isGemini429, parseGeminiRetryDelayMs, sleep } from '@/lib/ai/gemini-retry';
 
 /**
  * Verifica o status de uma norma usando IA (com web search para Gemini)
@@ -173,42 +174,45 @@ JSON:
 
     response = completion.choices[0]?.message?.content?.trim() || '{}';
   } else {
-    // Gemini com Google Search (grounding)
-    // Força uso de modelo compatível com grounding
+    // Gemini com Google Search (grounding), com retry em 429
     const groundingModel = model === 'gemini-flash-latest' ? 'gemini-2.5-flash' : model;
     console.log(`[NORMS] Initializing Gemini with model: ${groundingModel} (original: ${model})`);
 
-    try {
-      const { GoogleGenerativeAI } = await import('@google/generative-ai');
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const geminiModel = genAI.getGenerativeModel({
-        model: groundingModel,
-        generationConfig: {
-          temperature: 0.2,
-          maxOutputTokens: 8192,  // Aumentado para máximo do Gemini (permite verificações muito detalhadas)
-        },
-        tools: [{
-          google_search: {}  // Sintaxe correta conforme documentação
-        }]
-      });
+    const { GoogleGenerativeAI } = await import('@google/generative-ai');
+    const genAI = new GoogleGenerativeAI(apiKey);
+    const geminiModel = genAI.getGenerativeModel({
+      model: groundingModel,
+      generationConfig: {
+        temperature: 0.2,
+        maxOutputTokens: 8192
+      },
+      tools: [{ google_search: {} }]
+    });
 
-      console.log(`[NORMS] Calling Gemini API with Google Search for ${reference.number}...`);
-      const result = await geminiModel.generateContent(prompt);
-
-      console.log(`[NORMS] Gemini API response received for ${reference.number}`);
-      console.log(`[NORMS] Raw response:`, JSON.stringify(result.response, null, 2));
-
-      response = result.response.text().trim();
-      console.log(`[NORMS] Parsed text response:`, response);
-
-    } catch (geminiError: any) {
-      console.error(`[NORMS] Gemini API Error for ${reference.number}:`, {
-        message: geminiError.message,
-        stack: geminiError.stack,
-        fullError: geminiError
-      });
-      throw geminiError; // Re-throw to be caught by outer try-catch
+    const maxRetries = 4;
+    let lastErr: any;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`[NORMS] Calling Gemini API with Google Search for ${reference.number}...`);
+        const result = await geminiModel.generateContent(prompt);
+        console.log(`[NORMS] Gemini API response received for ${reference.number}`);
+        response = result.response.text().trim();
+        console.log(`[NORMS] Parsed text response:`, response);
+        lastErr = undefined;
+        break;
+      } catch (geminiError: any) {
+        lastErr = geminiError;
+        console.error(`[NORMS] Gemini API Error for ${reference.number}:`, geminiError.message);
+        if (isGemini429(geminiError) && attempt < maxRetries) {
+          const delayMs = parseGeminiRetryDelayMs(geminiError);
+          console.warn(`[NORMS] Gemini 429 (tentativa ${attempt}/${maxRetries}), aguardando ${(delayMs / 1000).toFixed(1)}s...`);
+          await sleep(delayMs);
+        } else {
+          throw geminiError;
+        }
+      }
     }
+    if (lastErr) throw lastErr;
   }
 
   // Parse JSON - tenta múltiplas estratégias

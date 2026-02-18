@@ -5,6 +5,7 @@
 
 import { AdjustSuggestion } from './types';
 import { extractDocumentStructure } from '@/lib/improvement/document-analyzer';
+import { isGemini429, parseGeminiRetryDelayMs, sleep } from '@/lib/ai/gemini-retry';
 import OpenAI from 'openai';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
@@ -83,7 +84,7 @@ async function analyzeBatch(
 
   const prompt = buildPrompt(paragraphs, sectionTitle, instructions, creativity);
 
-  let responseText: string;
+  let responseText = '';
 
   if (provider === 'openai' || provider === 'grok') {
     const client = new OpenAI({
@@ -102,34 +103,42 @@ async function analyzeBatch(
     responseText = response.choices[0].message.content || '{}';
 
   } else {
-    // Gemini
+    // Gemini with 429 retry (quota/rate limit)
     const genAI = new GoogleGenerativeAI(apiKey);
-
-    // Configure grounding if enabled
     const modelConfig: any = {
       model,
       generationConfig: {
         temperature: creativity / 10,
-        maxOutputTokens: 8192 // Aumentado para máximo do Gemini (permite ajustes muito detalhados)
+        maxOutputTokens: 8192
       }
     };
-
-    // Add Google Search Grounding if enabled
     if (useGrounding) {
       console.log('[ADJUST] Using Google Search Grounding');
-      modelConfig.tools = [{
-        googleSearch: {}
-      }];
+      modelConfig.tools = [{ googleSearch: {} }];
     } else {
-      // Only set responseMimeType when NOT using tools
-      // Tool use with responseMimeType is unsupported
       modelConfig.generationConfig.responseMimeType = 'application/json';
     }
-
     const geminiModel = genAI.getGenerativeModel(modelConfig);
-
-    const result = await geminiModel.generateContent(prompt);
-    responseText = result.response.text();
+    const maxRetries = 4;
+    let lastError: any;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const result = await geminiModel.generateContent(prompt);
+        responseText = result.response.text();
+        lastError = undefined;
+        break;
+      } catch (err: any) {
+        lastError = err;
+        if (isGemini429(err) && attempt < maxRetries) {
+          const delayMs = parseGeminiRetryDelayMs(err);
+          console.warn(`[ADJUST] Gemini 429 (tentativa ${attempt}/${maxRetries}), aguardando ${(delayMs / 1000).toFixed(1)}s...`);
+          await sleep(delayMs);
+        } else {
+          throw err;
+        }
+      }
+    }
+    if (lastError) throw lastError;
   }
 
   // Parse response

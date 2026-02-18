@@ -4,6 +4,7 @@ import { extractDocumentStructure, generateGlobalContext } from '@/lib/improveme
 import { analyzeSectionForImprovements } from '@/lib/improvement/section-analyzer';
 import { analyzeDocumentForAdjustments } from '@/lib/adjust/processor';
 import { AIProvider } from '@/lib/ai/types';
+import { isGemini429, parseGeminiRetryDelayMs, sleep } from '@/lib/ai/gemini-retry';
 import { SupportedLanguage } from '@/lib/translation/types';
 import { processChapterVersion } from './chapter-processor';
 import { processReferences, formatReferencesForContext, type ReferenceInput } from './reference-processor';
@@ -1093,23 +1094,39 @@ Retorne APENAS o JSON, sem texto adicional.`;
 
       response = completion.choices[0]?.message?.content?.trim() || '{"suggestions":[]}';
     } else {
-      // Gemini
+      // Gemini with 429 retry
       const { GoogleGenerativeAI } = await import('@google/generative-ai');
       const genAI = new GoogleGenerativeAI(apiKey);
       const geminiModel = genAI.getGenerativeModel({
         model,
         generationConfig: {
           temperature: 0.3,
-          maxOutputTokens: 8192, // Aumentado para máximo do Gemini (permite atualizações muito detalhadas)
+          maxOutputTokens: 8192,
           responseMimeType: 'application/json'
         }
       });
-
-      const result = await geminiModel.generateContent({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }]
-      });
-
-      response = result.response.text();
+      const maxRetries = 4;
+      let lastErr: any;
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          const result = await geminiModel.generateContent({
+            contents: [{ role: 'user', parts: [{ text: prompt }] }]
+          });
+          response = result.response.text();
+          lastErr = undefined;
+          break;
+        } catch (err: any) {
+          lastErr = err;
+          if (isGemini429(err) && attempt < maxRetries) {
+            const delayMs = parseGeminiRetryDelayMs(err);
+            console.warn(`[UPDATE] Gemini 429 (tentativa ${attempt}/${maxRetries}), aguardando ${(delayMs / 1000).toFixed(1)}s...`);
+            await sleep(delayMs);
+          } else {
+            throw err;
+          }
+        }
+      }
+      if (lastErr) throw lastErr;
     }
 
     // Parse response
@@ -1170,7 +1187,7 @@ Respond with ONLY a JSON object in this format:
   ]
 }`;
 
-  let responseText: string;
+  let responseText = '';
 
   if (provider === 'openai' || provider === 'grok') {
     const OpenAI = (await import('openai')).default;
@@ -1189,23 +1206,36 @@ Respond with ONLY a JSON object in this format:
     responseText = response.choices[0].message.content || '{}';
 
   } else {
-    // Gemini
+    // Gemini with 429 retry
     const { GoogleGenerativeAI } = await import('@google/generative-ai');
     const genAI = new GoogleGenerativeAI(apiKey);
     const geminiModel = genAI.getGenerativeModel({ model });
-
-    const result = await geminiModel.generateContent({
-      contents: [{
-        role: 'user',
-        parts: [{ text: prompt }]
-      }],
-      generationConfig: {
-        temperature: 0.3,
-        responseMimeType: 'application/json'
+    const maxRetries = 4;
+    let lastErr: any;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const result = await geminiModel.generateContent({
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.3,
+            responseMimeType: 'application/json'
+          }
+        });
+        responseText = result.response.text();
+        lastErr = undefined;
+        break;
+      } catch (err: any) {
+        lastErr = err;
+        if (isGemini429(err) && attempt < maxRetries) {
+          const delayMs = parseGeminiRetryDelayMs(err);
+          console.warn(`[TRANSLATE] Gemini 429 (tentativa ${attempt}/${maxRetries}), aguardando ${(delayMs / 1000).toFixed(1)}s...`);
+          await sleep(delayMs);
+        } else {
+          throw err;
+        }
       }
-    });
-
-    responseText = result.response.text();
+    }
+    if (lastErr) throw lastErr;
   }
 
   // Parse response
