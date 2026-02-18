@@ -200,18 +200,57 @@ export class PipelineEngine {
    * Execute ADJUST operation
    */
   private async executeAdjust(context: PipelineExecutionContext): Promise<OperationResult> {
-    // Call adjust API internally
-    const { config, sourceDocumentPath } = context;
+    const { config, sourceDocumentPath, documentId } = context;
 
-    // TODO: Implement adjust operation logic
-    // For now, return dummy result
+    // Call adjust API to generate suggestions
+    const adjustConfig = config as any;
+    const apiUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3001';
+    const url = `${apiUrl}/api/adjust`;
+
+    console.log(`[PIPELINE] Calling adjust API: ${url}`);
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        documentId,
+        sourceDocumentPath,
+        instructions: adjustConfig.instructions,
+        creativity: adjustConfig.creativity,
+        provider: adjustConfig.provider,
+        model: adjustConfig.model,
+        useGrounding: adjustConfig.useGrounding || false
+      })
+    });
+
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error(`[PIPELINE] Adjust API error (${res.status}):`, errorText);
+      throw new Error(`Failed to start adjust operation: ${res.status} ${errorText.substring(0, 200)}`);
+    }
+
+    const data = await res.json();
+    const adjustJobId = data.jobId;
+    console.log(`[PIPELINE] Adjust job created: ${adjustJobId}`);
+
+    // Wait for adjust job to complete (poll)
+    await this.waitForJobCompletion('adjust', adjustJobId);
+
+    // Get results
+    const adjustJob = await this.getAdjustJob(adjustJobId);
+
     return {
       operation: 'adjust',
       operationIndex: context.currentOperationIndex,
-      status: 'completed',
-      outputDocumentPath: sourceDocumentPath, // Placeholder
+      status: 'awaiting_approval',
+      outputDocumentPath: sourceDocumentPath, // Keep original until approved
+      operationJobId: adjustJobId,
+      requiresApproval: true,
+      approvalStatus: 'pending',
       metadata: {
-        items_processed: 0
+        items_generated: adjustJob.suggestions?.length || 0,
+        instructions: adjustConfig.instructions,
+        creativity: adjustConfig.creativity
       },
       completedAt: new Date().toISOString()
     };
@@ -641,6 +680,8 @@ export class PipelineEngine {
       const job =
         operation === 'translate'
           ? await this.getTranslationJob(jobId)
+          : operation === 'adjust'
+          ? await this.getAdjustJob(jobId)
           : await this.getJobStatus(operation, jobId);
 
       if (job.status === 'completed') {
@@ -669,6 +710,9 @@ export class PipelineEngine {
         break;
       case 'update':
         endpoint = `/api/norms-update/${jobId}`;
+        break;
+      case 'adjust':
+        endpoint = `/api/adjust/${jobId}`;
         break;
       case 'translate':
         endpoint = `/api/translate/${jobId}`;
@@ -723,6 +767,23 @@ export class PipelineEngine {
     return data;
   }
   
+  /**
+   * Get adjust job details
+   */
+  private async getAdjustJob(jobId: string): Promise<any> {
+    const { data, error } = await supabase
+      .from('adjust_jobs')
+      .select('*')
+      .eq('id', jobId)
+      .single();
+
+    if (error || !data) {
+      throw new Error('Failed to get adjust job');
+    }
+
+    return data;
+  }
+
   /**
    * Get translation job details
    */
