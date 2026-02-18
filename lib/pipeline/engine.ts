@@ -377,18 +377,25 @@ export class PipelineEngine {
 
     console.log(`[PIPELINE] Calling adapt API: ${url}`);
 
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        documentId,
-        sourceDocumentPath,
-        style: adaptConfig.style,
-        targetAudience: adaptConfig.targetAudience,
-        provider: adaptConfig.provider,
-        model: adaptConfig.model
-      })
-    });
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          documentId,
+          sourceDocumentPath,
+          style: adaptConfig.style,
+          targetAudience: adaptConfig.targetAudience,
+          provider: adaptConfig.provider,
+          model: adaptConfig.model
+        }),
+        signal: AbortSignal.timeout(30000) // 30 second timeout
+      });
+    } catch (fetchError: any) {
+      console.error(`[PIPELINE] Fetch error calling adapt API:`, fetchError);
+      throw new Error(`Failed to connect to adapt API: ${fetchError.message || 'Network error'}. URL: ${url}`);
+    }
 
     if (!res.ok) {
       const errorText = await res.text();

@@ -113,8 +113,17 @@ export async function POST(
 
   } catch (error: any) {
     console.error('[CHAPTER-ADAPT-API] Error:', error);
+    console.error('[CHAPTER-ADAPT-API] Error stack:', error.stack);
+    console.error('[CHAPTER-ADAPT-API] Error details:', {
+      message: error.message,
+      name: error.name,
+      cause: error.cause
+    });
     return NextResponse.json(
-      { error: error.message },
+      { 
+        error: error.message || 'Failed to start adapt operation',
+        details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      },
       { status: 500 }
     );
   }

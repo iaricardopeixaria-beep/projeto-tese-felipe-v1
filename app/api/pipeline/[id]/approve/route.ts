@@ -273,14 +273,28 @@ async function applyAdaptChanges(
   adaptJobId: string,
   approvedSuggestionIds: string[]
 ): Promise<string> {
-  const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3001'}/api/adapt/${adaptJobId}/apply`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ acceptedSuggestionIds: approvedSuggestionIds })
-  });
+  const apiUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.APP_URL || 'http://localhost:3001';
+  const url = `${apiUrl}/api/adapt/${adaptJobId}/apply`;
+  
+  console.log(`[PIPELINE-APPROVE] Calling adapt apply API: ${url}`);
+  
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ acceptedSuggestionIds: approvedSuggestionIds }),
+      signal: AbortSignal.timeout(60000) // 60 second timeout for file download
+    });
+  } catch (fetchError: any) {
+    console.error(`[PIPELINE-APPROVE] Fetch error calling adapt apply API:`, fetchError);
+    throw new Error(`Failed to connect to adapt apply API: ${fetchError.message || 'Network error'}. URL: ${url}`);
+  }
 
   if (!res.ok) {
-    throw new Error('Failed to apply adapt changes');
+    const errorText = await res.text();
+    console.error(`[PIPELINE-APPROVE] Adapt apply API error (${res.status}):`, errorText);
+    throw new Error(`Failed to apply adapt changes: ${res.status} ${errorText.substring(0, 200)}`);
   }
 
   const blob = await res.blob();

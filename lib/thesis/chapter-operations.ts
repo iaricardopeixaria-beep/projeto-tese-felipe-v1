@@ -788,9 +788,18 @@ export async function executeAdaptOperation(
 
   } catch (error: any) {
     console.error('[CHAPTER-ADAPT] Error:', error);
+    console.error('[CHAPTER-ADAPT] Error stack:', error.stack);
+    console.error('[CHAPTER-ADAPT] Error details:', {
+      message: error.message,
+      name: error.name,
+      cause: error.cause,
+      jobId,
+      chapterId,
+      versionId
+    });
     await updateOperationJob(jobId, {
       status: 'error',
-      error_message: error.message
+      error_message: error.message || 'Unknown error occurred'
     });
     throw error;
   }
