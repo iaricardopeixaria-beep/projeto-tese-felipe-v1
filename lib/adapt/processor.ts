@@ -18,7 +18,8 @@ export async function analyzeDocumentForAdaptation(
   targetAudience: string | undefined,
   provider: 'openai' | 'gemini' | 'grok',
   model: string,
-  apiKey: string
+  apiKey: string,
+  onProgress?: (currentSection: number, totalSections: number, currentBatch?: number, totalBatches?: number) => Promise<void>
 ): Promise<AdaptationSuggestion[]> {
   console.log('[ADAPT] Extracting document structure...');
 
@@ -40,13 +41,23 @@ export async function analyzeDocumentForAdaptation(
       .filter(p => !p.isHeader)
       .map(p => ({ text: p.text, index: p.index }));
 
-    console.log(`[ADAPT] Analyzing section ${i + 1}/${structure.sections.length}: "${section.title.substring(0, 50)}"`);
+    const sectionTitle = section.title.substring(0, 50);
+    console.log(`[ADAPT] 📝 Analyzing section ${i + 1}/${structure.sections.length}: "${sectionTitle}" (${sectionParagraphs.length} paragraphs)`);
+
+    // Calculate number of batches for this section
+    const totalBatches = Math.ceil(sectionParagraphs.length / BATCH_SIZE);
+    console.log(`[ADAPT]   → Processing ${totalBatches} batch(es) for this section`);
 
     // Process section in batches
+    let batchIndex = 0;
     for (let batchStart = 0; batchStart < sectionParagraphs.length; batchStart += BATCH_SIZE) {
+      batchIndex++;
       const batchEnd = Math.min(batchStart + BATCH_SIZE, sectionParagraphs.length);
       const batch = sectionParagraphs.slice(batchStart, batchEnd);
 
+      console.log(`[ADAPT]   → Batch ${batchIndex}/${totalBatches}: Processing paragraphs ${batchStart + 1}-${batchEnd} (${batch.length} paragraphs)`);
+
+      const batchStartTime = Date.now();
       const suggestions = await analyzeBatch(
         batch,
         section.title,
@@ -56,12 +67,22 @@ export async function analyzeDocumentForAdaptation(
         model,
         apiKey
       );
+      const batchDuration = ((Date.now() - batchStartTime) / 1000).toFixed(1);
+
+      console.log(`[ADAPT]   → Batch ${batchIndex}/${totalBatches} completed in ${batchDuration}s: Generated ${suggestions.length} suggestions`);
 
       allSuggestions.push(...suggestions);
+
+      // Update progress
+      if (onProgress) {
+        await onProgress(i + 1, structure.sections.length, batchIndex, totalBatches);
+      }
     }
+
+    console.log(`[ADAPT] ✅ Section ${i + 1}/${structure.sections.length} completed: Total ${allSuggestions.length} suggestions so far`);
   }
 
-  console.log(`[ADAPT] Generated ${allSuggestions.length} adaptation suggestions`);
+  console.log(`[ADAPT] 🎉 Generated ${allSuggestions.length} adaptation suggestions total`);
 
   return allSuggestions;
 }
@@ -81,7 +102,10 @@ async function analyzeBatch(
 
   const prompt = buildPrompt(paragraphs, sectionTitle, style, targetAudience);
 
+  console.log(`[ADAPT]     → Calling AI API (${provider}/${model}) for ${paragraphs.length} paragraphs...`);
+
   let responseText: string;
+  const apiStartTime = Date.now();
 
   if (provider === 'openai' || provider === 'grok') {
     const client = new OpenAI({
@@ -98,6 +122,8 @@ async function analyzeBatch(
     });
 
     responseText = response.choices[0].message.content || '{}';
+    const apiDuration = ((Date.now() - apiStartTime) / 1000).toFixed(1);
+    console.log(`[ADAPT]     → AI API responded in ${apiDuration}s`);
 
   } else {
     // Gemini
@@ -117,9 +143,12 @@ async function analyzeBatch(
     });
 
     responseText = result.response.text();
+    const apiDuration = ((Date.now() - apiStartTime) / 1000).toFixed(1);
+    console.log(`[ADAPT]     → AI API responded in ${apiDuration}s`);
   }
 
   // Parse response
+  console.log(`[ADAPT]     → Parsing AI response...`);
   try {
     const data = JSON.parse(responseText);
     const suggestions: AdaptationSuggestion[] = (data.suggestions || []).map((s: any) => ({
@@ -131,9 +160,11 @@ async function analyzeBatch(
       adaptationType: s.adaptationType || 'style'
     }));
 
+    console.log(`[ADAPT]     → Parsed ${suggestions.length} suggestions from AI response`);
     return suggestions;
   } catch (error) {
-    console.error('[ADAPT] Failed to parse AI response:', error);
+    console.error('[ADAPT] ❌ Failed to parse AI response:', error);
+    console.error('[ADAPT] Response text (first 500 chars):', responseText.substring(0, 500));
     return [];
   }
 }

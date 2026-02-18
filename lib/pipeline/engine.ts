@@ -667,17 +667,24 @@ export class PipelineEngine {
     const { extractDocumentStructure } = await import('@/lib/improvement/document-analyzer');
     
     // Create adapt job in database
+    if (!documentId) {
+      throw new Error('Document ID is required for adapt operation');
+    }
+
     const adaptJobId = randomUUID();
     const { error: jobError } = await supabase
       .from('adapt_jobs')
       .insert({
         id: adaptJobId,
-        document_id: documentId || null,
+        document_id: documentId,
         status: 'pending',
         style: adaptConfig.style,
         target_audience: adaptConfig.targetAudience || null,
         provider: adaptConfig.provider,
-        model: adaptConfig.model
+        model: adaptConfig.model,
+        current_section: 0,
+        total_sections: 0,
+        progress_percentage: 0
       });
 
     if (jobError) {
@@ -693,14 +700,18 @@ export class PipelineEngine {
       .eq('id', adaptJobId);
 
     // Extract document structure
+    console.log(`[PIPELINE ADAPT ${adaptJobId}] Extracting document structure...`);
     const { structure, paragraphs } = await extractDocumentStructure(sourceDocumentPath);
+    console.log(`[PIPELINE ADAPT ${adaptJobId}] Extracted ${paragraphs.length} paragraphs, ${structure.sections.length} sections`);
 
     // Update job with structure
     await supabase
       .from('adapt_jobs')
       .update({
         document_structure: structure,
-        total_sections: structure.sections.length
+        total_sections: structure.sections.length,
+        current_section: 0,
+        progress_percentage: 0
       })
       .eq('id', adaptJobId);
 
@@ -711,28 +722,49 @@ export class PipelineEngine {
       ? (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)!
       : process.env.GROK_API_KEY!;
 
+    console.log(`[PIPELINE ADAPT ${adaptJobId}] Starting adaptation analysis with provider: ${adaptConfig.provider}, model: ${adaptConfig.model}`);
+
     try {
-      // Generate adaptation suggestions directly
+      // Generate adaptation suggestions directly with progress tracking
       const suggestions = await analyzeDocumentForAdaptation(
         sourceDocumentPath,
         adaptConfig.style,
         adaptConfig.targetAudience,
         adaptConfig.provider,
         adaptConfig.model,
-        apiKey
+        apiKey,
+        async (currentSection: number, totalSections: number, currentBatch?: number, totalBatches?: number) => {
+          const baseProgress = (currentSection / totalSections) * 100;
+          const batchProgress = currentBatch && totalBatches ? (currentBatch / totalBatches) * (100 / totalSections) : 0;
+          const progress = Math.min(Math.round(baseProgress + batchProgress), 100);
+          
+          console.log(`[PIPELINE ADAPT ${adaptJobId}] Progress: Section ${currentSection}/${totalSections}${currentBatch && totalBatches ? `, Batch ${currentBatch}/${totalBatches}` : ''} (${progress}%)`);
+          
+          await supabase
+            .from('adapt_jobs')
+            .update({
+              current_section: currentSection,
+              progress_percentage: progress
+            })
+            .eq('id', adaptJobId);
+        }
       );
 
-      console.log(`[PIPELINE] Generated ${suggestions.length} adaptation suggestions`);
+      console.log(`[PIPELINE ADAPT ${adaptJobId}] ✅ Generated ${suggestions.length} adaptation suggestions`);
 
       // Save suggestions to database
+      console.log(`[PIPELINE ADAPT ${adaptJobId}] Saving ${suggestions.length} suggestions to database...`);
       await supabase
         .from('adapt_jobs')
         .update({
           status: 'completed',
           suggestions: suggestions,
-          completed_at: new Date().toISOString()
+          completed_at: new Date().toISOString(),
+          progress_percentage: 100
         })
         .eq('id', adaptJobId);
+
+      console.log(`[PIPELINE ADAPT ${adaptJobId}] ✅ Adapt operation completed successfully`);
 
       // Get results
       const adaptJob = await this.getAdaptJob(adaptJobId);
