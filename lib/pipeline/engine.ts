@@ -724,8 +724,11 @@ export class PipelineEngine {
           ? await this.getTranslationJob(jobId)
           : operation === 'adjust'
           ? await this.getAdjustJob(jobId)
+<<<<<<< HEAD
           : operation === 'adapt'
           ? await this.getAdaptJob(jobId)
+=======
+>>>>>>> 97822242def835a655437f68295fab7d3af2f81c
           : await this.getJobStatus(operation, jobId);
 
       if (job.status === 'completed') {
@@ -758,9 +761,12 @@ export class PipelineEngine {
       case 'adjust':
         endpoint = `/api/adjust/${jobId}`;
         break;
+<<<<<<< HEAD
       case 'adapt':
         endpoint = `/api/adapt/${jobId}`;
         break;
+=======
+>>>>>>> 97822242def835a655437f68295fab7d3af2f81c
       case 'translate':
         endpoint = `/api/translate/${jobId}`;
         break;
@@ -832,6 +838,7 @@ export class PipelineEngine {
   }
 
   /**
+<<<<<<< HEAD
    * Get adapt job details
    */
   private async getAdaptJob(jobId: string): Promise<any> {
@@ -849,6 +856,8 @@ export class PipelineEngine {
   }
 
   /**
+=======
+>>>>>>> 97822242def835a655437f68295fab7d3af2f81c
    * Get translation job details
    */
   private async getTranslationJob(jobId: string): Promise<any> {

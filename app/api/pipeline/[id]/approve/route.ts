@@ -126,11 +126,14 @@ async function applyApprovedChanges(
         operationResult.operationJobId,
         approvedItems
       );
+<<<<<<< HEAD
     } else if (currentOperation === 'adapt') {
       appliedDocumentPath = await applyAdaptChanges(
         operationResult.operationJobId,
         approvedItems
       );
+=======
+>>>>>>> 97822242def835a655437f68295fab7d3af2f81c
     }
     // translate doesn't need approval/apply - it just translates
 
@@ -267,6 +270,7 @@ async function applyAdjustChanges(
 }
 
 /**
+<<<<<<< HEAD
  * Apply adapt changes (call existing API)
  */
 async function applyAdaptChanges(
@@ -294,6 +298,8 @@ async function applyAdaptChanges(
 }
 
 /**
+=======
+>>>>>>> 97822242def835a655437f68295fab7d3af2f81c
  * Save intermediate document to Storage and database
  */
 async function saveIntermediateDocument(
