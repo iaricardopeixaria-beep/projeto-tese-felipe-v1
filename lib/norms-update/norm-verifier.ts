@@ -1,8 +1,9 @@
 import { NormReference, NormStatus, UpdateType } from './types';
 import { isGemini429, parseGeminiRetryDelayMs, sleep } from '@/lib/ai/gemini-retry';
+import { verifyWithOfficialSources } from './sources/official-sources';
 
 /**
- * Verifica o status de uma norma usando IA (com web search para Gemini)
+ * Verifica o status de uma norma: primeiro fontes oficiais (LexML/Senado), depois IA (Gemini/OpenAI).
  * Esta função roda no SERVIDOR (API route)
  */
 export async function verifyNormStatus(
@@ -16,19 +17,34 @@ export async function verifyNormStatus(
   console.log(`[NORMS] Verifying: ${reference.type} ${reference.number}`);
 
   try {
+    // 1) Fontes oficiais (LexML, Senado) para leis/decretos/portarias/resoluções brasileiras
+    const officialResult = await verifyWithOfficialSources(reference);
+    if (officialResult) {
+      return {
+        ...reference,
+        status: officialResult.status,
+        updatedNumber: officialResult.updatedNumber,
+        updatedDate: officialResult.updatedDate,
+        updateDescription: officialResult.updateDescription,
+        updateType: officialResult.updateType,
+        sourceUrl: officialResult.sourceUrl,
+        suggestedText: officialResult.suggestedText,
+        confidence: officialResult.confidence,
+        isPaid: false
+      };
+    }
+
+    // 2) Fallback: IA (Gemini com Google Search ou OpenAI com webSearchFn)
     let searchResults = '';
 
-    // Se for OpenAI, precisa de web search manual
     if (provider === 'openai' && webSearchFn) {
       const searchQuery = buildSearchQuery(reference);
       console.log(`[NORMS] Searching: ${searchQuery}`);
       searchResults = await webSearchFn(searchQuery);
     } else if (provider === 'gemini') {
       console.log(`[NORMS] Using Gemini with Google Search grounding`);
-      // Gemini faz busca automaticamente via grounding
     }
 
-    // Usa IA para analisar (Gemini busca automaticamente, OpenAI usa searchResults)
     const analysis = await analyzeSearchResults(
       reference,
       searchResults,
