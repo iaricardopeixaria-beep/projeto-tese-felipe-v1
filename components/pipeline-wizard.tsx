@@ -595,22 +595,22 @@ const MODELS: Record<string, string[]> = {
 function getDefaultProviders(op: PipelineOperation): string[] {
   switch (op) {
     case 'adjust':
-      return ['openai', 'gemini', 'grok'];
+      return ['gemini', 'openai', 'grok'];
     case 'update':
       return ['gemini'];
     case 'improve':
-      return ['openai', 'gemini'];
+      return ['gemini', 'openai'];
     case 'adapt':
-      return ['openai', 'gemini'];
+      return ['gemini', 'openai'];
     case 'translate':
-      return ['openai'];
+      return ['gemini', 'openai'];
     default:
-      return ['openai'];
+      return ['gemini', 'openai'];
   }
 }
 
 function getDefaultModel(provider: string): string {
-  return MODELS[provider]?.[0] || 'gpt-4o';
+  return MODELS[provider]?.[0] || (provider === 'gemini' ? 'gemini-2.5-flash' : 'gpt-4o');
 }
 
 function validateConfig(op: PipelineOperation, config: any): boolean {

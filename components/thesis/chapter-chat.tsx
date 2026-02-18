@@ -7,8 +7,12 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { MessageSquare, Send, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ChapterSelector } from './chapter-selector';
 import { CitationBadge, CitationDisplayMode } from './citation-badge';
+
+type AIProvider = 'openai' | 'gemini' | 'grok';
 
 type ChapterVersion = {
   id: string;
@@ -63,7 +67,45 @@ export function ChapterChat({ currentChapterId, allChapters }: ChapterChatProps)
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [selectedVersionIds, setSelectedVersionIds] = useState<string[]>([]);
+  const [settings, setSettings] = useState<{ models?: Record<AIProvider, string[]> } | null>(null);
+  const [selectedProvider, setSelectedProvider] = useState<AIProvider>('gemini');
+  const [selectedModels, setSelectedModels] = useState<Record<AIProvider, string>>({
+    openai: '',
+    gemini: '',
+    grok: ''
+  });
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+
+  // Load settings (available models per provider)
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/settings');
+        const data = await res.json();
+        if (cancelled) return;
+        setSettings(data.settings || null);
+        const models = data.settings?.models || {};
+        const nextModels = {
+          openai: models.openai?.[0] || '',
+          gemini: models.gemini?.[0] || '',
+          grok: models.grok?.[0] || ''
+        };
+        setSelectedModels(nextModels);
+        // Prefer Gemini when available (user may have Google credits)
+        if (nextModels.gemini) {
+          setSelectedProvider('gemini');
+        } else if (nextModels.openai) {
+          setSelectedProvider('openai');
+        } else if (nextModels.grok) {
+          setSelectedProvider('grok');
+        }
+      } catch (e) {
+        if (!cancelled) console.error('[CHAT] Settings load error:', e);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // Save messages to localStorage whenever they change
   useEffect(() => {
@@ -119,14 +161,21 @@ export function ChapterChat({ currentChapterId, allChapters }: ChapterChatProps)
     setLoading(true);
 
     try {
+      const provider = selectedProvider;
+      const model = selectedModels[provider];
+      if (!model) {
+        toast.error(`Selecione um modelo para ${provider === 'openai' ? 'OpenAI' : provider === 'gemini' ? 'Gemini' : 'Grok'}`);
+        return;
+      }
+
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           chapterVersionIds: selectedVersionIds,
           question: input,
-          providers: ['openai'],
-          models: { openai: 'gpt-4o-mini' }
+          providers: [provider],
+          models: { [provider]: model }
         })
       });
 
@@ -273,6 +322,46 @@ export function ChapterChat({ currentChapterId, allChapters }: ChapterChatProps)
                 )}
               </div>
             </ScrollArea>
+
+            {/* Provider & Model selection */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Provedor de IA</Label>
+                <Select
+                  value={selectedProvider}
+                  onValueChange={(v) => setSelectedProvider(v as AIProvider)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Escolha o provedor" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="openai">OpenAI</SelectItem>
+                    <SelectItem value="gemini">Gemini (Google)</SelectItem>
+                    <SelectItem value="grok">Grok</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Modelo</Label>
+                <Select
+                  value={selectedModels[selectedProvider] || ''}
+                  onValueChange={(v: string) =>
+                    setSelectedModels((prev: Record<AIProvider, string>) => ({ ...prev, [selectedProvider]: v }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Escolha o modelo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(settings?.models?.[selectedProvider] || []).map((m: string) => (
+                      <SelectItem key={m} value={m}>
+                        {m}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
 
             {/* Input */}
             <div className="flex gap-2">
