@@ -19,7 +19,8 @@ export async function analyzeDocumentForAdaptation(
   provider: 'openai' | 'gemini' | 'grok',
   model: string,
   apiKey: string,
-  onProgress?: (currentSection: number, totalSections: number, currentBatch?: number, totalBatches?: number) => Promise<void>
+  onProgress?: (currentSection: number, totalSections: number, currentBatch?: number, totalBatches?: number) => Promise<void>,
+  onSavePartial?: (suggestions: AdaptationSuggestion[], currentSection: number, totalSections: number) => Promise<void>
 ): Promise<AdaptationSuggestion[]> {
   console.log('[ADAPT] Extracting document structure...');
 
@@ -65,13 +66,24 @@ export async function analyzeDocumentForAdaptation(
         targetAudience,
         provider,
         model,
-        apiKey
+        apiKey,
+        onSavePartial ? async () => {
+          // Save partial progress before retry
+          if (onSavePartial) {
+            await onSavePartial(allSuggestions, i + 1, structure.sections.length);
+          }
+        } : undefined
       );
       const batchDuration = ((Date.now() - batchStartTime) / 1000).toFixed(1);
 
       console.log(`[ADAPT]   → Batch ${batchIndex}/${totalBatches} completed in ${batchDuration}s: Generated ${suggestions.length} suggestions`);
 
       allSuggestions.push(...suggestions);
+
+      // Save partial progress after each successful batch
+      if (onSavePartial) {
+        await onSavePartial(allSuggestions, i + 1, structure.sections.length);
+      }
 
       // Update progress
       if (onProgress) {
@@ -88,7 +100,31 @@ export async function analyzeDocumentForAdaptation(
 }
 
 /**
- * Analyze a batch of paragraphs for style adaptation
+ * Check if an error is retryable (429, 500, 502, 503, 504, network errors)
+ */
+function isRetryableError(error: any): boolean {
+  if (!error) return false;
+  
+  // Check for OpenAI/Grok rate limit or quota errors
+  if (error.status === 429 || error.code === 'insufficient_quota' || error.code === 'rate_limit_exceeded') {
+    return true;
+  }
+  
+  // Check for server errors
+  if (error.status >= 500 && error.status < 600) {
+    return true;
+  }
+  
+  // Check for network errors
+  if (error.message?.includes('ECONNRESET') || error.message?.includes('ETIMEDOUT') || error.message?.includes('ENOTFOUND')) {
+    return true;
+  }
+  
+  return false;
+}
+
+/**
+ * Analyze a batch of paragraphs for style adaptation with retry logic
  */
 async function analyzeBatch(
   paragraphs: Array<{ text: string; index: number }>,
@@ -97,76 +133,130 @@ async function analyzeBatch(
   targetAudience: string | undefined,
   provider: 'openai' | 'gemini' | 'grok',
   model: string,
-  apiKey: string
+  apiKey: string,
+  onSavePartial?: () => Promise<void>
 ): Promise<AdaptationSuggestion[]> {
 
   const prompt = buildPrompt(paragraphs, sectionTitle, style, targetAudience);
+  const maxRetries = 3;
+  const retryDelayMs = 60 * 1000; // 1 minute
 
-  console.log(`[ADAPT]     → Calling AI API (${provider}/${model}) for ${paragraphs.length} paragraphs...`);
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`[ADAPT]     → Calling AI API (${provider}/${model}) for ${paragraphs.length} paragraphs...${attempt > 1 ? ` (Tentativa ${attempt}/${maxRetries})` : ''}`);
 
-  let responseText: string;
-  const apiStartTime = Date.now();
+      let responseText: string;
+      const apiStartTime = Date.now();
 
-  if (provider === 'openai' || provider === 'grok') {
-    const client = new OpenAI({
-      apiKey,
-      baseURL: provider === 'grok' ? 'https://api.x.ai/v1' : undefined
-    });
+      if (provider === 'openai' || provider === 'grok') {
+        const client = new OpenAI({
+          apiKey,
+          baseURL: provider === 'grok' ? 'https://api.x.ai/v1' : undefined
+        });
 
-    const response = await client.chat.completions.create({
-      model,
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.3, // Lower temperature for style adaptation
-      max_tokens: 12000, // Aumentado para permitir adaptações muito detalhadas
-      response_format: { type: 'json_object' }
-    });
+        const response = await client.chat.completions.create({
+          model,
+          messages: [{ role: 'user', content: prompt }],
+          temperature: 0.3, // Lower temperature for style adaptation
+          max_tokens: 12000, // Aumentado para permitir adaptações muito detalhadas
+          response_format: { type: 'json_object' }
+        });
 
-    responseText = response.choices[0].message.content || '{}';
-    const apiDuration = ((Date.now() - apiStartTime) / 1000).toFixed(1);
-    console.log(`[ADAPT]     → AI API responded in ${apiDuration}s`);
+        responseText = response.choices[0].message.content || '{}';
+        const apiDuration = ((Date.now() - apiStartTime) / 1000).toFixed(1);
+        console.log(`[ADAPT]     → AI API responded in ${apiDuration}s`);
 
-  } else {
-    // Gemini
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const geminiModel = genAI.getGenerativeModel({ model });
+      } else {
+        // Gemini
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const geminiModel = genAI.getGenerativeModel({ model });
 
-    const result = await geminiModel.generateContent({
-      contents: [{
-        role: 'user',
-        parts: [{ text: prompt }]
-      }],
-      generationConfig: {
-        temperature: 0.3,
-        maxOutputTokens: 8192, // Aumentado para máximo do Gemini (permite adaptações muito detalhadas)
-        responseMimeType: 'application/json'
+        const result = await geminiModel.generateContent({
+          contents: [{
+            role: 'user',
+            parts: [{ text: prompt }]
+          }],
+          generationConfig: {
+            temperature: 0.3,
+            maxOutputTokens: 8192, // Aumentado para máximo do Gemini (permite adaptações muito detalhadas)
+            responseMimeType: 'application/json'
+          }
+        });
+
+        responseText = result.response.text();
+        const apiDuration = ((Date.now() - apiStartTime) / 1000).toFixed(1);
+        console.log(`[ADAPT]     → AI API responded in ${apiDuration}s`);
       }
-    });
 
-    responseText = result.response.text();
-    const apiDuration = ((Date.now() - apiStartTime) / 1000).toFixed(1);
-    console.log(`[ADAPT]     → AI API responded in ${apiDuration}s`);
+      // Parse response
+      console.log(`[ADAPT]     → Parsing AI response...`);
+      try {
+        const data = JSON.parse(responseText);
+        const suggestions: AdaptationSuggestion[] = (data.suggestions || []).map((s: any) => ({
+          id: randomUUID(),
+          originalText: s.originalText || '',
+          adaptedText: s.adaptedText || '',
+          reason: s.reason || '',
+          sectionTitle,
+          adaptationType: s.adaptationType || 'style'
+        }));
+
+        console.log(`[ADAPT]     → Parsed ${suggestions.length} suggestions from AI response`);
+        return suggestions;
+      } catch (parseError) {
+        console.error('[ADAPT] ❌ Failed to parse AI response:', parseError);
+        console.error('[ADAPT] Response text (first 500 chars):', responseText.substring(0, 500));
+        return [];
+      }
+      
+    } catch (error: any) {
+      const isRetryable = isRetryableError(error);
+      
+      if (isRetryable && attempt < maxRetries) {
+        console.warn(`[ADAPT] ⚠️ Erro temporário na tentativa ${attempt}/${maxRetries}: ${error.message || error.code || 'Unknown error'}`);
+        console.log(`[ADAPT]     → Aguardando ${retryDelayMs / 1000}s antes de tentar novamente...`);
+        
+        // Save partial progress before retry
+        if (onSavePartial) {
+          try {
+            await onSavePartial();
+            console.log(`[ADAPT]     → Progresso parcial salvo antes do retry`);
+          } catch (saveError: any) {
+            console.error(`[ADAPT]     → Erro ao salvar progresso parcial:`, saveError.message);
+          }
+        }
+        
+        // Wait before retry
+        await new Promise(resolve => setTimeout(resolve, retryDelayMs));
+        continue; // Try again
+      } else {
+        // Not retryable or max retries reached
+        if (attempt >= maxRetries) {
+          console.error(`[ADAPT] ❌ Falhou após ${maxRetries} tentativas: ${error.message || error.code || 'Unknown error'}`);
+          console.error(`[ADAPT]     → Salvando progresso parcial e continuando...`);
+          
+          // Save partial progress before failing
+          if (onSavePartial) {
+            try {
+              await onSavePartial();
+              console.log(`[ADAPT]     → Progresso parcial salvo`);
+            } catch (saveError: any) {
+              console.error(`[ADAPT]     → Erro ao salvar progresso parcial:`, saveError.message);
+            }
+          }
+          
+          // Return empty array to continue with partial results
+          return [];
+        }
+        
+        // Non-retryable error, throw immediately
+        throw error;
+      }
+    }
   }
-
-  // Parse response
-  console.log(`[ADAPT]     → Parsing AI response...`);
-  try {
-    const data = JSON.parse(responseText);
-    const suggestions: AdaptationSuggestion[] = (data.suggestions || []).map((s: any) => ({
-      id: randomUUID(),
-      originalText: s.originalText || '',
-      adaptedText: s.adaptedText || '',
-      reason: s.reason || '',
-      sectionTitle,
-      adaptationType: s.adaptationType || 'style'
-    }));
-
-    console.log(`[ADAPT]     → Parsed ${suggestions.length} suggestions from AI response`);
-    return suggestions;
-  } catch (error) {
-    console.error('[ADAPT] ❌ Failed to parse AI response:', error);
-    console.error('[ADAPT] Response text (first 500 chars):', responseText.substring(0, 500));
-    return [];
-  }
+  
+  // Should never reach here, but just in case
+  return [];
 }
 
 /**

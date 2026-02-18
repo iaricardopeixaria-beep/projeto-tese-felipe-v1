@@ -765,6 +765,24 @@ export class PipelineEngine {
               progress_percentage: progress
             })
             .eq('id', adaptJobId);
+        },
+        async (partialSuggestions: any[], currentSection: number, totalSections: number) => {
+          // Save partial progress when retry is needed
+          console.log(`[PIPELINE ADAPT ${adaptJobId}] 💾 Salvando progresso parcial: ${partialSuggestions.length} sugestões (Seção ${currentSection}/${totalSections})`);
+          
+          const progress = totalSections > 0 ? Math.round((currentSection / totalSections) * 100) : 0;
+          
+          await supabase
+            .from('adapt_jobs')
+            .update({
+              suggestions: partialSuggestions,
+              current_section: currentSection,
+              progress_percentage: progress,
+              status: 'adapting' // Keep as adapting during retry
+            })
+            .eq('id', adaptJobId);
+          
+          console.log(`[PIPELINE ADAPT ${adaptJobId}] ✅ Progresso parcial salvo: ${partialSuggestions.length} sugestões, ${progress}% completo`);
         }
       );
 
