@@ -33,8 +33,8 @@ export async function createTranslationJob(
     provider: params.provider,
     model: params.model,
     status: 'pending',
-    total_chunks: 0,
-    started_at: new Date().toISOString()
+    total_chunks: 0
+    // started_at será definido quando o status mudar para 'translating'
   });
   if (error) throw new Error(`Failed to create translation job: ${error.message}`);
   return jobId;
