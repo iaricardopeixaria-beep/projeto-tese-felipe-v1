@@ -203,39 +203,97 @@ export class PipelineEngine {
   private async executeAdjust(context: PipelineExecutionContext): Promise<OperationResult> {
     const { config, sourceDocumentPath, documentId } = context;
 
-    // Call adjust API to generate suggestions
+    // Call adjust operation directly to avoid self-fetch issues (Railway/Vercel)
     const adjustConfig = config as any;
-    const apiUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3001';
-    const url = `${apiUrl}/api/adjust`;
+    
+    console.log(`[PIPELINE] Starting adjust operation directly (avoiding self-fetch)`);
 
-    console.log(`[PIPELINE] Calling adjust API: ${url}`);
-
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        documentId,
-        sourceDocumentPath,
+    // Import and call the adjust processor directly
+    const { analyzeDocumentForAdjustments } = await import('@/lib/adjust/processor');
+    const { extractDocumentStructure } = await import('@/lib/improvement/document-analyzer');
+    
+    // Create adjust job in database
+    const adjustJobId = randomUUID();
+    const { error: jobError } = await supabase
+      .from('adjust_jobs')
+      .insert({
+        id: adjustJobId,
+        document_id: documentId || null,
+        status: 'pending',
         instructions: adjustConfig.instructions,
         creativity: adjustConfig.creativity,
+        use_grounding: adjustConfig.useGrounding || false,
         provider: adjustConfig.provider,
-        model: adjustConfig.model,
-        useGrounding: adjustConfig.useGrounding || false
-      })
-    });
+        model: adjustConfig.model
+      });
 
-    if (!res.ok) {
-      const errorText = await res.text();
-      console.error(`[PIPELINE] Adjust API error (${res.status}):`, errorText);
-      throw new Error(`Failed to start adjust operation: ${res.status} ${errorText.substring(0, 200)}`);
+    if (jobError) {
+      throw new Error(`Failed to create adjust job: ${jobError.message}`);
     }
 
-    const data = await res.json();
-    const adjustJobId = data.jobId;
     console.log(`[PIPELINE] Adjust job created: ${adjustJobId}`);
 
-    // Wait for adjust job to complete (poll)
-    await this.waitForJobCompletion('adjust', adjustJobId);
+    // Update status to adjusting
+    await supabase
+      .from('adjust_jobs')
+      .update({ status: 'adjusting', started_at: new Date().toISOString() })
+      .eq('id', adjustJobId);
+
+    // Extract document structure
+    const { structure, paragraphs } = await extractDocumentStructure(sourceDocumentPath);
+
+    // Update job with structure
+    await supabase
+      .from('adjust_jobs')
+      .update({
+        document_structure: structure,
+        total_sections: structure.sections.length
+      })
+      .eq('id', adjustJobId);
+
+    // Get API key
+    const apiKey = adjustConfig.provider === 'openai'
+      ? process.env.OPENAI_API_KEY!
+      : adjustConfig.provider === 'gemini'
+      ? (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)!
+      : process.env.GROK_API_KEY!;
+
+    try {
+      // Generate adjustment suggestions directly
+      const suggestions = await analyzeDocumentForAdjustments(
+        sourceDocumentPath,
+        adjustConfig.instructions,
+        adjustConfig.creativity,
+        adjustConfig.provider,
+        adjustConfig.model,
+        apiKey,
+        adjustConfig.useGrounding || false
+      );
+
+      console.log(`[PIPELINE] Generated ${suggestions.length} adjustment suggestions`);
+
+      // Save suggestions to database
+      await supabase
+        .from('adjust_jobs')
+        .update({
+          status: 'completed',
+          suggestions: suggestions,
+          completed_at: new Date().toISOString()
+        })
+        .eq('id', adjustJobId);
+
+    } catch (error: any) {
+      console.error(`[PIPELINE] Error in adjust operation:`, error);
+      await supabase
+        .from('adjust_jobs')
+        .update({
+          status: 'error',
+          error_message: error.message,
+          completed_at: new Date().toISOString()
+        })
+        .eq('id', adjustJobId);
+      throw error;
+    }
 
     // Get results
     const adjustJob = await this.getAdjustJob(adjustJobId);
@@ -263,35 +321,156 @@ export class PipelineEngine {
   private async executeUpdate(context: PipelineExecutionContext): Promise<OperationResult> {
     const { config, sourceDocumentPath, documentId } = context;
 
-    // Call norms-update API to detect references
+    // Call norms-update operation directly to avoid self-fetch issues (Railway/Vercel)
     const updateConfig = config as any;
-    const apiUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3001';
-    const url = `${apiUrl}/api/norms-update/${documentId}`;
+    
+    console.log(`[PIPELINE] Starting norms-update operation directly (avoiding self-fetch)`);
 
-    console.log(`[PIPELINE] Calling norms-update API: ${url}`);
+    // Import and call the norms-update processor directly
+    const { extractDocumentStructure } = await import('@/lib/improvement/document-analyzer');
+    const { detectNormsInDocument } = await import('@/lib/norms-update/norm-detector');
+    const { verifyMultipleNorms } = await import('@/lib/norms-update/norm-verifier');
+    
+    // Create norms-update job in database
+    const updateJobId = randomUUID();
+    const { error: jobError } = await supabase
+      .from('norm_update_jobs')
+      .insert({
+        id: updateJobId,
+        document_id: documentId || null,
+        status: 'pending',
+        norm_references: [],
+        total_references: 0,
+        vigentes: 0,
+        alteradas: 0,
+        revogadas: 0,
+        substituidas: 0,
+        manual_review: 0,
+        current_reference: 0,
+        progress_percentage: 0
+      });
 
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        provider: updateConfig.provider,
-        model: updateConfig.model,
-        sourceDocumentPath
-      })
-    });
-
-    if (!res.ok) {
-      const errorText = await res.text();
-      console.error(`[PIPELINE] Norms-update API error (${res.status}):`, errorText);
-      throw new Error(`Failed to start norms-update operation: ${res.status} ${errorText.substring(0, 200)}`);
+    if (jobError) {
+      throw new Error(`Failed to create norms-update job: ${jobError.message}`);
     }
 
-    const data = await res.json();
-    const updateJobId = data.jobId;
     console.log(`[PIPELINE] Norms-update job created: ${updateJobId}`);
 
-    // Wait for norms-update job to complete (poll)
-    await this.waitForJobCompletion('update', updateJobId);
+    // Update status to analyzing
+    await supabase
+      .from('norm_update_jobs')
+      .update({ status: 'analyzing', started_at: new Date().toISOString() })
+      .eq('id', updateJobId);
+
+    // Extract document structure
+    const { structure, paragraphs } = await extractDocumentStructure(sourceDocumentPath);
+
+    // Prepare paragraphs with context
+    const paragraphsWithContext = paragraphs
+      .filter(p => !p.isHeader)
+      .map((p, idx) => ({
+        text: p.text,
+        index: p.index,
+        chapterTitle: structure.sections.find((s: any) =>
+          p.index >= s.startParagraphIndex &&
+          p.index <= s.endParagraphIndex &&
+          s.level === 1
+        )?.title
+      }));
+
+    // Get API key
+    const apiKey = updateConfig.provider === 'openai'
+      ? process.env.OPENAI_API_KEY!
+      : (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)!;
+
+    try {
+      // Detect norms in document
+      let references = await detectNormsInDocument(
+        paragraphsWithContext,
+        updateConfig.provider,
+        updateConfig.model,
+        apiKey
+      );
+
+      console.log(`[PIPELINE] Found ${references.length} norm references`);
+
+      // Update job with references found
+      await supabase
+        .from('norm_update_jobs')
+        .update({
+          total_references: references.length,
+          progress_percentage: 10
+        })
+        .eq('id', updateJobId);
+
+      if (references.length === 0) {
+        // No norms found
+        await supabase
+          .from('norm_update_jobs')
+          .update({
+            status: 'completed',
+            completed_at: new Date().toISOString(),
+            progress_percentage: 100
+          })
+          .eq('id', updateJobId);
+      } else {
+        // Verify norm statuses
+        const verifiedReferences = await verifyMultipleNorms(
+          references,
+          updateConfig.provider,
+          updateConfig.model,
+          apiKey,
+          undefined, // Gemini doesn't need external web search function
+          async (current: number, total: number) => {
+            const percentage = 10 + Math.floor((current / total) * 90);
+            await supabase
+              .from('norm_update_jobs')
+              .update({
+                current_reference: current,
+                progress_percentage: percentage
+              })
+              .eq('id', updateJobId);
+          }
+        );
+
+        // Calculate statistics
+        const stats = {
+          vigentes: verifiedReferences.filter((r: any) => r.status === 'vigente').length,
+          alteradas: verifiedReferences.filter((r: any) => r.status === 'alterada').length,
+          revogadas: verifiedReferences.filter((r: any) => r.status === 'revogada').length,
+          substituidas: verifiedReferences.filter((r: any) => r.status === 'substituida').length,
+          manual_review: verifiedReferences.filter((r: any) => r.updateType === 'manual').length
+        };
+
+        // Save final result
+        await supabase
+          .from('norm_update_jobs')
+          .update({
+            status: 'completed',
+            norm_references: verifiedReferences,
+            vigentes: stats.vigentes,
+            alteradas: stats.alteradas,
+            revogadas: stats.revogadas,
+            substituidas: stats.substituidas,
+            manual_review: stats.manual_review,
+            progress_percentage: 100,
+            completed_at: new Date().toISOString()
+          })
+          .eq('id', updateJobId);
+      }
+
+    } catch (error: any) {
+      console.error(`[PIPELINE] Error in norms-update operation:`, error);
+      await supabase
+        .from('norm_update_jobs')
+        .update({
+          status: 'error',
+          error_message: error.message,
+          completed_at: new Date().toISOString()
+        })
+        .eq('id', updateJobId);
+      throw error;
+    }
 
     // Get results
     const updateJob = await this.getNormsUpdateJob(updateJobId);
@@ -305,7 +484,7 @@ export class PipelineEngine {
       requiresApproval: true,
       approvalStatus: 'pending',
       metadata: {
-        items_generated: updateJob.references?.length || 0
+        items_generated: updateJob.norm_references?.length || 0
       },
       completedAt: new Date().toISOString()
     };
@@ -317,35 +496,142 @@ export class PipelineEngine {
   private async executeImprove(context: PipelineExecutionContext): Promise<OperationResult> {
     const { config, sourceDocumentPath, documentId } = context;
 
-    // Call improve API to generate suggestions
+    // Call improve operation directly to avoid self-fetch issues (Railway/Vercel)
     const improveConfig = config as any;
-    const apiUrl = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3001';
-    const url = `${apiUrl}/api/improve/${documentId}`;
+    
+    console.log(`[PIPELINE] Starting improve operation directly (avoiding self-fetch)`);
 
-    console.log(`[PIPELINE] Calling improve API: ${url}`);
+    // Import and call the improve processor directly
+    const { extractDocumentStructure, generateGlobalContext } = await import('@/lib/improvement/document-analyzer');
+    const { analyzeSectionForImprovements } = await import('@/lib/improvement/section-analyzer');
+    
+    // Create improve job in database
+    const improveJobId = randomUUID();
+    const { error: jobError } = await supabase
+      .from('improvement_jobs')
+      .insert({
+        id: improveJobId,
+        document_id: documentId || null,
+        status: 'pending'
+      });
 
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        provider: improveConfig.provider,
-        model: improveConfig.model,
-        sourceDocumentPath
-      })
-    });
-
-    if (!res.ok) {
-      const errorText = await res.text();
-      console.error(`[PIPELINE] Improve API error (${res.status}):`, errorText);
-      throw new Error(`Failed to start improve operation: ${res.status} ${errorText.substring(0, 200)}`);
+    if (jobError) {
+      throw new Error(`Failed to create improve job: ${jobError.message}`);
     }
 
-    const data = await res.json();
-    const improveJobId = data.jobId;
     console.log(`[PIPELINE] Improve job created: ${improveJobId}`);
 
-    // Wait for improve job to complete (poll)
-    await this.waitForJobCompletion('improve', improveJobId);
+    // Update status to analyzing
+    await supabase
+      .from('improvement_jobs')
+      .update({ status: 'analyzing', started_at: new Date().toISOString() })
+      .eq('id', improveJobId);
+
+    // Extract document structure
+    const { structure, paragraphs } = await extractDocumentStructure(sourceDocumentPath);
+
+    // Get API key
+    const apiKey = improveConfig.provider === 'openai'
+      ? process.env.OPENAI_API_KEY!
+      : (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)!;
+
+    // Generate global context
+    const globalContext = await generateGlobalContext(
+      paragraphs,
+      structure,
+      improveConfig.provider,
+      improveConfig.model,
+      apiKey
+    );
+
+    // Update job with structure and context
+    await supabase
+      .from('improvement_jobs')
+      .update({
+        global_context: globalContext,
+        document_structure: structure,
+        total_sections: structure.sections.length
+      })
+      .eq('id', improveJobId);
+
+    try {
+      // Analyze each section
+      const allSuggestions: any[] = [];
+      const BATCH_SIZE = 20;
+
+      for (let i = 0; i < structure.sections.length; i++) {
+        const section = structure.sections[i];
+        const sectionParagraphs = paragraphs
+          .slice(section.startParagraphIndex, section.endParagraphIndex + 1)
+          .filter(p => !p.isHeader)
+          .map(p => p.text);
+
+        if (sectionParagraphs.length > BATCH_SIZE) {
+          for (let batchStart = 0; batchStart < sectionParagraphs.length; batchStart += BATCH_SIZE) {
+            const batchEnd = Math.min(batchStart + BATCH_SIZE, sectionParagraphs.length);
+            const batch = sectionParagraphs.slice(batchStart, batchEnd);
+
+            const suggestions = await analyzeSectionForImprovements(
+              batch,
+              globalContext,
+              section.title,
+              section.startParagraphIndex + batchStart,
+              improveConfig.provider,
+              improveConfig.model,
+              apiKey
+            );
+
+            allSuggestions.push(...suggestions);
+          }
+        } else {
+          const suggestions = await analyzeSectionForImprovements(
+            sectionParagraphs,
+            globalContext,
+            section.title,
+            section.startParagraphIndex,
+            improveConfig.provider,
+            improveConfig.model,
+            apiKey
+          );
+
+          allSuggestions.push(...suggestions);
+        }
+
+        // Update progress
+        const percentage = Math.round(((i + 1) / structure.sections.length) * 100);
+        await supabase
+          .from('improvement_jobs')
+          .update({
+            current_section: i + 1,
+            progress_percentage: percentage
+          })
+          .eq('id', improveJobId);
+      }
+
+      // Save suggestions to database
+      await supabase
+        .from('improvement_jobs')
+        .update({
+          status: 'completed',
+          suggestions: allSuggestions,
+          completed_at: new Date().toISOString()
+        })
+        .eq('id', improveJobId);
+
+      console.log(`[PIPELINE] Generated ${allSuggestions.length} improvement suggestions`);
+
+    } catch (error: any) {
+      console.error(`[PIPELINE] Error in improve operation:`, error);
+      await supabase
+        .from('improvement_jobs')
+        .update({
+          status: 'error',
+          error_message: error.message,
+          completed_at: new Date().toISOString()
+        })
+        .eq('id', improveJobId);
+      throw error;
+    }
 
     // Get results
     const improveJob = await this.getImproveJob(improveJobId);
@@ -859,7 +1145,7 @@ export class PipelineEngine {
    */
   private async getNormsUpdateJob(jobId: string): Promise<any> {
     const { data, error } = await supabase
-      .from('norms_update_jobs')
+      .from('norm_update_jobs')
       .select('*')
       .eq('id', jobId)
       .single();
