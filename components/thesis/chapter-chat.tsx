@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -40,10 +40,53 @@ type ChapterChatProps = {
 };
 
 export function ChapterChat({ currentChapterId, allChapters }: ChapterChatProps) {
-  const [messages, setMessages] = useState<Message[]>([]);
+  // Load messages from localStorage on mount
+  const loadMessagesFromStorage = (): Message[] => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const stored = localStorage.getItem(`chat-history-${currentChapterId}`);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        // Convert timestamp strings back to Date objects
+        return parsed.map((msg: any) => ({
+          ...msg,
+          timestamp: new Date(msg.timestamp)
+        }));
+      }
+    } catch (error) {
+      console.error('[CHAT] Error loading messages from storage:', error);
+    }
+    return [];
+  };
+
+  const [messages, setMessages] = useState<Message[]>(loadMessagesFromStorage);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [selectedVersionIds, setSelectedVersionIds] = useState<string[]>([]);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+
+  // Save messages to localStorage whenever they change
+  useEffect(() => {
+    if (typeof window === 'undefined' || messages.length === 0) return;
+    try {
+      localStorage.setItem(`chat-history-${currentChapterId}`, JSON.stringify(messages));
+    } catch (error) {
+      console.error('[CHAT] Error saving messages to storage:', error);
+    }
+  }, [messages, currentChapterId]);
+
+  // Auto-scroll to bottom when new messages are added
+  useEffect(() => {
+    if (messages.length > 0 && scrollAreaRef.current) {
+      // Find the ScrollArea viewport (Radix UI creates it)
+      setTimeout(() => {
+        const viewport = scrollAreaRef.current?.closest('[data-radix-scroll-area-root]')?.querySelector('[data-radix-scroll-area-viewport]') as HTMLElement;
+        if (viewport) {
+          viewport.scrollTop = viewport.scrollHeight;
+        }
+      }, 100);
+    }
+  }, [messages]);
 
   // Auto-seleciona a versão atual do capítulo atual
   useEffect(() => {
@@ -93,21 +136,35 @@ export function ChapterChat({ currentChapterId, allChapters }: ChapterChatProps)
 
       const data = await response.json();
 
-      // Pega a primeira resposta (openai)
-      const answer = data.answers?.openai;
+      console.log('[CHAT] Response data:', data);
+
+      // answers é um array de AIResponse
+      const answers = data.answers || [];
       const citationMode = data.citationMode;
 
-      if (answer) {
+      if (answers.length > 0) {
+        // Pega a primeira resposta (geralmente openai)
+        const answer = answers[0];
+        
+        console.log('[CHAT] Processing answer:', {
+          provider: answer.provider,
+          hasText: !!answer.text,
+          citationsCount: answer.citations?.length || 0
+        });
+
         const assistantMessage: Message = {
           id: (Date.now() + 1).toString(),
           role: 'assistant',
-          content: answer.answer || answer,
-          citations: answer.citations,
+          content: answer.text || 'Sem resposta',
+          citations: answer.citations || [],
           citationMode: citationMode,
           timestamp: new Date()
         };
 
         setMessages(prev => [...prev, assistantMessage]);
+      } else {
+        console.warn('[CHAT] No answers received');
+        toast.error('Nenhuma resposta recebida da IA');
       }
 
     } catch (error: any) {
@@ -144,7 +201,8 @@ export function ChapterChat({ currentChapterId, allChapters }: ChapterChatProps)
           </CardHeader>
           <CardContent className="space-y-4">
             {/* Messages */}
-            <ScrollArea className="h-[400px] pr-4">
+            <ScrollArea className="h-[400px]">
+              <div ref={scrollAreaRef} className="pr-4 space-y-4">
               {messages.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-center py-12">
                   <MessageSquare className="h-12 w-12 text-muted-foreground mb-4 opacity-50" />
@@ -154,7 +212,17 @@ export function ChapterChat({ currentChapterId, allChapters }: ChapterChatProps)
                   </p>
                 </div>
               ) : (
-                <div className="space-y-4">
+                <>
+                  {loading && messages[messages.length - 1]?.role === 'user' && (
+                    <div className="flex justify-start">
+                      <div className="max-w-[80%] rounded-lg p-3 bg-muted">
+                        <div className="flex items-center gap-2">
+                          <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                          <p className="text-sm text-muted-foreground">Processando...</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   {messages.map((message) => (
                     <div
                       key={message.id}
@@ -163,8 +231,8 @@ export function ChapterChat({ currentChapterId, allChapters }: ChapterChatProps)
                       <div
                         className={`max-w-[80%] rounded-lg p-3 ${
                           message.role === 'user'
-                            ? 'bg-primary text-primary-foreground'
-                            : 'bg-muted'
+                            ? 'bg-red-600 text-white'
+                            : 'bg-muted text-foreground'
                         }`}
                       >
                         <p className="text-sm whitespace-pre-wrap">{message.content}</p>
@@ -174,12 +242,12 @@ export function ChapterChat({ currentChapterId, allChapters }: ChapterChatProps)
                           <div className="mt-2 pt-2 border-t border-border/50">
                             <p className="text-xs text-muted-foreground mb-1">Fontes:</p>
                             <div className="flex flex-wrap gap-1">
-                              {message.citations.map((citation, idx) => (
+                              {message.citations.map((citation: any, idx: number) => (
                                 <CitationBadge
                                   key={idx}
                                   citation={{
-                                    pageFrom: citation.pageFrom,
-                                    pageTo: citation.pageTo,
+                                    pageFrom: citation.page || citation.pageFrom || 0,
+                                    pageTo: citation.page || citation.pageTo || citation.pageFrom || 0,
                                     chapterOrder: citation.metadata?.chapterOrder,
                                     chapterTitle: citation.metadata?.chapterTitle,
                                     versionNumber: citation.metadata?.versionNumber
@@ -200,9 +268,10 @@ export function ChapterChat({ currentChapterId, allChapters }: ChapterChatProps)
                         </p>
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
+                    ))}
+                  </>
+                )}
+              </div>
             </ScrollArea>
 
             {/* Input */}
@@ -232,6 +301,27 @@ export function ChapterChat({ currentChapterId, allChapters }: ChapterChatProps)
               <p className="text-sm text-muted-foreground text-center">
                 ← Selecione capítulos no painel ao lado
               </p>
+            )}
+
+            {/* Clear history button */}
+            {messages.length > 0 && (
+              <div className="flex justify-end">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    if (confirm('Tem certeza que deseja limpar o histórico de conversa?')) {
+                      setMessages([]);
+                      if (typeof window !== 'undefined') {
+                        localStorage.removeItem(`chat-history-${currentChapterId}`);
+                      }
+                    }
+                  }}
+                  className="text-xs text-muted-foreground"
+                >
+                  Limpar histórico
+                </Button>
+              </div>
             )}
           </CardContent>
         </Card>
