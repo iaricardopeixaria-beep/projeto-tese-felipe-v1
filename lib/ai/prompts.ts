@@ -23,10 +23,11 @@ export function buildSystemPrompt(action?: string | null): string {
 
 export function buildUserPrompt(question: string, context: Chunk[]): string {
   const contextText = context
-    .map(
-      (chunk) =>
-        `[Página: ${chunk.pageFrom}${chunk.pageTo !== chunk.pageFrom ? `-${chunk.pageTo}` : ''}, §${chunk.ix}]\n${chunk.text}`
-    )
+    .map((chunk, index) => {
+      const pageInfo = `[Página: ${chunk.pageFrom}${chunk.pageTo !== chunk.pageFrom ? `-${chunk.pageTo}` : ''}]`;
+      const chapterInfo = chunk.metadata?.chapterTitle ? ` [Capítulo: ${chunk.metadata.chapterTitle}]` : '';
+      return `${pageInfo}${chapterInfo}\n${chunk.text}`;
+    })
     .join('\n\n---\n\n');
 
   return `PERGUNTA:

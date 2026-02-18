@@ -292,7 +292,10 @@ export interface ContextConfig {
   // Which chapter versions to include
   chapter_version_ids: string[];
 
-  // How many chunks to retrieve
+  // How many chunks to retrieve per version
+  top_k_per_version?: number; // Default: 5
+
+  // Total chunks to retrieve across all versions
   top_k?: number; // Default: 16
 
   // Search mode

@@ -62,7 +62,8 @@ export async function POST(request: NextRequest) {
       }
 
       // Converte chunks para formato esperado pela AI
-      topChunks = contextResult.chunks.map(chunk => ({
+      topChunks = contextResult.chunks.map((chunk, index) => ({
+        ix: chunk.chunk_index ?? index, // Use chunk_index from database or fallback to array index
         text: chunk.text,
         pageFrom: chunk.page_from,
         pageTo: chunk.page_to,
@@ -78,6 +79,12 @@ export async function POST(request: NextRequest) {
 
       console.log(`[CHAT] Found ${topChunks.length} chunks from ${contextResult.chapters_included.length} chapters`);
       console.log(`[CHAT] Citation mode: ${citationMode}`);
+      console.log(`[CHAT] Sample chunk structure:`, topChunks[0] ? {
+        hasIx: 'ix' in topChunks[0],
+        hasText: 'text' in topChunks[0],
+        hasPageFrom: 'pageFrom' in topChunks[0],
+        hasMetadata: 'metadata' in topChunks[0]
+      } : 'No chunks');
 
     }
     // Sistema antigo: documento único
@@ -104,12 +111,16 @@ export async function POST(request: NextRequest) {
     }
 
     // Execute AI requests
+    console.log(`[CHAT] Executing AI requests with ${topChunks.length} chunks for ${providers.length} provider(s)`);
+    
     const answers = await executeMultipleAI(providers, models, {
       question,
       context: topChunks,
       action: action ?? null,
       citationMode
     });
+
+    console.log(`[CHAT] ✅ Received ${answers.length} answer(s) from AI providers`);
 
     return NextResponse.json({ answers, citationMode });
   } catch (error: any) {

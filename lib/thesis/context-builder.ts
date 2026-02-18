@@ -30,11 +30,16 @@ export async function buildMultiChapterContext(
   config: ContextConfig,
   query: string
 ): Promise<ContextResult> {
-  const { chapter_version_ids, top_k = 16, search_mode = 'bm25' } = config;
+  const { 
+    chapter_version_ids, 
+    top_k = 16, 
+    top_k_per_version = 5,
+    search_mode = 'bm25' 
+  } = config;
 
   console.log(`[CONTEXT-BUILDER] Building context for ${chapter_version_ids.length} chapter versions`);
   console.log(`[CONTEXT-BUILDER] Query: "${query}"`);
-  console.log(`[CONTEXT-BUILDER] Top-K: ${top_k}`);
+  console.log(`[CONTEXT-BUILDER] Top-K per version: ${top_k_per_version}, Total Top-K: ${top_k}`);
 
   // 1. Load all chapter versions (with caching)
   const loadedVersions: ChapterVersionInMemory[] = [];
@@ -64,8 +69,8 @@ export async function buildMultiChapterContext(
     const metadata = versionMetadata.get(version.id);
     if (!metadata) continue;
 
-    // Search this version
-    const chunks = searchChapterVersion(version, query, top_k);
+    // Search this version with per-version limit
+    const chunks = searchChapterVersion(version, query, top_k_per_version);
 
     // Add metadata to chunks
     const chunksWithContext: ChunkWithContext[] = chunks.map(chunk => ({
