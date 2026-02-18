@@ -883,11 +883,9 @@ export async function executeUpdateOperation(
 
     await updateOperationJob(jobId, { progress: 60 });
 
-    // TODO: Implement actual update logic
-    // Should analyze document against references and suggest updates
+    // Analyze document against references and suggest updates
     console.log(`[CHAPTER-UPDATE] Analyzing document against reference materials...`);
 
-    // Placeholder: just analyze for improvements with reference context
     const allSuggestions: any[] = [];
     for (let i = 0; i < structure.sections.length; i++) {
       const section = structure.sections[i];
@@ -896,11 +894,12 @@ export async function executeUpdateOperation(
         .filter(p => !p.isHeader)
         .map(p => p.text);
 
-      const suggestions = await analyzeSectionForImprovements(
+      const suggestions = await analyzeSectionForUpdates(
         sectionParagraphs,
         globalContext,
         section.title,
         section.startParagraphIndex,
+        referencesContext,
         provider,
         model,
         apiKey
@@ -955,7 +954,8 @@ export async function executeUpdateOperation(
             improvedText: s.improvedText || '',
             reason: s.reason || '',
             confidence: s.confidence || 0.9,
-            chapterTitle: s.chapterTitle || ''
+            chapterTitle: s.sectionTitle || s.chapterTitle || '',
+            referenceSource: s.referenceSource || ''
           }))
         }
       })
@@ -981,6 +981,149 @@ export async function executeUpdateOperation(
       error_message: error.message
     });
     throw error;
+  }
+}
+
+/**
+ * Analyze section for updates based on reference materials
+ * Compares document content with references and suggests factual updates
+ */
+async function analyzeSectionForUpdates(
+  paragraphs: string[],
+  globalContext: any,
+  sectionTitle: string,
+  paragraphStartIndex: number,
+  referencesContext: string,
+  provider: 'openai' | 'gemini' | 'grok',
+  model: string,
+  apiKey: string
+): Promise<any[]> {
+  const fullText = paragraphs.join('\n\n');
+
+  // Format chapter summaries for context
+  const chapterContext = globalContext.chapterSummaries && globalContext.chapterSummaries.length > 0
+    ? '\n\nESTRUTURA DO DOCUMENTO:\n' + globalContext.chapterSummaries
+        .map((ch: any, i: number) => `${i + 1}. ${ch.title}\n   → ${ch.summary}`)
+        .join('\n')
+    : '';
+
+  const prompt = `Você é um especialista em atualização de documentos acadêmicos. Analise o texto abaixo comparando-o com os materiais de referência fornecidos e sugira atualizações APENAS quando houver informações desatualizadas, novos dados ou melhorias factuais baseadas nas referências.
+
+CONTEXTO DO DOCUMENTO:
+- Tema: ${globalContext.theme}
+- Objetivo: ${globalContext.objective || 'Não especificado'}
+- Seção atual: ${sectionTitle}${chapterContext}
+
+MATERIAIS DE REFERÊNCIA FORNECIDOS:
+${referencesContext || 'Nenhum material de referência fornecido.'}
+
+ÁREAS DE ANÁLISE PARA ATUALIZAÇÃO:
+1. INFORMAÇÕES DESATUALIZADAS: Dados, estatísticas, leis, normas ou fatos que mudaram desde a escrita original
+2. NOVOS DADOS: Informações recentes das referências que devem ser incorporadas
+3. PRECISÃO FACTUAL: Correções de informações incorretas ou imprecisas baseadas nas referências
+4. COMPLETUDE: Informações importantes das referências que estão faltando no documento
+5. ALINHAMENTO COM REFERÊNCIAS: Ajustes para alinhar com padrões, normas ou diretrizes das referências
+
+REGRAS IMPORTANTES:
+❌ NÃO sugira mudanças apenas por estilo ou preferência pessoal
+❌ NÃO altere informações que estão corretas e atualizadas
+❌ NÃO sugira melhorias gerais de escrita (isso é função de "improve")
+✅ APENAS sugira atualizações FACTUAIS baseadas nas referências fornecidas
+✅ Foque em informações que mudaram ou precisam ser atualizadas
+✅ Cite qual referência suporta cada atualização sugerida
+✅ Mantenha o tom acadêmico e formal
+
+TEXTO PARA ANÁLISE:
+---
+${fullText}
+---
+
+Para cada atualização sugerida, retorne JSON no formato:
+{
+  "suggestions": [
+    {
+      "paragraphIndex": 0,
+      "originalText": "texto original exato da frase ou trecho (mínimo 30 caracteres)",
+      "improvedText": "texto atualizado baseado nas referências",
+      "reason": "explicação clara do motivo da atualização e qual referência suporta (1-2 frases)",
+      "type": "factual_update|new_data|outdated_info|completeness|alignment",
+      "confidence": 0.95,
+      "referenceSource": "breve indicação da referência que suporta esta atualização"
+    }
+  ]
+}
+
+IMPORTANTE:
+- "paragraphIndex" deve ser 0 para o primeiro parágrafo da seção, 1 para o segundo, etc
+- "originalText" deve ser um trecho COMPLETO e EXATO do texto (mínimo 30 caracteres)
+- "referenceSource" deve indicar qual referência ou parte dela suporta a atualização
+- Se não houver atualizações necessárias baseadas nas referências, retorne: {"suggestions": []}
+- Confidence: 1.0 = certeza absoluta baseada em referência clara, 0.7 = sugestão moderada
+- Foque em 3-8 atualizações mais importantes (não precisa sugerir tudo)
+- Se não houver referências fornecidas, retorne: {"suggestions": []}
+
+Retorne APENAS o JSON, sem texto adicional.`;
+
+  let response: string = '{"suggestions":[]}';
+
+  try {
+    if (provider === 'openai' || provider === 'grok') {
+      const OpenAI = (await import('openai')).default;
+      const client = new OpenAI({
+        apiKey,
+        baseURL: provider === 'grok' ? 'https://api.x.ai/v1' : undefined
+      });
+
+      const completion = await client.chat.completions.create({
+        model,
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.3,
+        max_tokens: 4000,
+        response_format: { type: 'json_object' }
+      });
+
+      response = completion.choices[0]?.message?.content?.trim() || '{"suggestions":[]}';
+    } else {
+      // Gemini
+      const { GoogleGenerativeAI } = await import('@google/generative-ai');
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const geminiModel = genAI.getGenerativeModel({
+        model,
+        generationConfig: {
+          temperature: 0.3,
+          responseMimeType: 'application/json'
+        }
+      });
+
+      const result = await geminiModel.generateContent({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }]
+      });
+
+      response = result.response.text();
+    }
+
+    // Parse response
+    const data = JSON.parse(response);
+    const suggestions: any[] = (data.suggestions || []).map((s: any) => ({
+      id: randomUUID(),
+      paragraphIndex: paragraphStartIndex + (s.paragraphIndex || 0),
+      sectionTitle,
+      originalText: s.originalText || '',
+      improvedText: s.improvedText || '',
+      reason: s.reason || '',
+      type: s.type || 'factual_update',
+      confidence: s.confidence || 0.9,
+      referenceSource: s.referenceSource || 'Referência fornecida'
+    }));
+
+    return suggestions;
+
+  } catch (error: any) {
+    console.error('[UPDATE] Failed to parse AI response:', error);
+    if (response) {
+      console.error('[UPDATE] Response was:', response.substring(0, 500));
+    }
+    return [];
   }
 }
 
