@@ -167,7 +167,7 @@ JSON:
       model,
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.2,
-      max_tokens: 1000,
+      max_tokens: 8000, // Aumentado para permitir verificações muito detalhadas
       response_format: { type: 'json_object' }
     });
 
@@ -185,7 +185,7 @@ JSON:
         model: groundingModel,
         generationConfig: {
           temperature: 0.2,
-          maxOutputTokens: 2000,  // Aumentado para acomodar grounding + resposta JSON
+          maxOutputTokens: 8192,  // Aumentado para máximo do Gemini (permite verificações muito detalhadas)
         },
         tools: [{
           google_search: {}  // Sintaxe correta conforme documentação

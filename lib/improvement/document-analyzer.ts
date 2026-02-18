@@ -249,7 +249,7 @@ Retorne APENAS um JSON válido no formato:
       model,
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.3,
-      max_tokens: 2000, // Aumentado para comportar resumos dos capítulos
+      max_tokens: 8000, // Aumentado para permitir análises globais muito detalhadas
       response_format: { type: 'json_object' }
     });
 
@@ -262,7 +262,7 @@ Retorne APENAS um JSON válido no formato:
       model,
       generationConfig: {
         temperature: 0.3,
-        maxOutputTokens: 2000
+        maxOutputTokens: 8192 // Aumentado para máximo do Gemini (permite análises muito detalhadas)
       }
     });
 

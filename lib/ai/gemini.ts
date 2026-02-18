@@ -26,7 +26,7 @@ export async function executeGemini(
         contents: [{ role: 'user', parts: [{ text: fullPrompt }] }],
         generationConfig: {
           temperature: 0.3,
-          maxOutputTokens: 2000
+          maxOutputTokens: 8192 // Aumentado para máximo do Gemini (permite respostas muito detalhadas)
         }
       });
 

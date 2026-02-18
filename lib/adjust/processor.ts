@@ -95,6 +95,7 @@ async function analyzeBatch(
       model,
       messages: [{ role: 'user', content: prompt }],
       temperature: creativity / 10, // Convert 0-10 to 0-1
+      max_tokens: 12000, // Aumentado para permitir ajustes muito detalhados
       response_format: { type: 'json_object' }
     });
 
@@ -108,7 +109,8 @@ async function analyzeBatch(
     const modelConfig: any = {
       model,
       generationConfig: {
-        temperature: creativity / 10
+        temperature: creativity / 10,
+        maxOutputTokens: 8192 // Aumentado para máximo do Gemini (permite ajustes muito detalhados)
       }
     };
 

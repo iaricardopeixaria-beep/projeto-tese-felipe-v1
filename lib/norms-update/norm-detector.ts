@@ -86,7 +86,7 @@ Retorne APENAS o JSON.`;
           model,
           messages: [{ role: 'user', content: prompt }],
           temperature: 0.1, // Bem baixo para ser preciso
-          max_tokens: 3000,
+          max_tokens: 12000, // Aumentado para permitir detecções muito detalhadas
           response_format: { type: 'json_object' }
         });
 
@@ -99,7 +99,7 @@ Retorne APENAS o JSON.`;
           model,
           generationConfig: {
             temperature: 0.1,
-            maxOutputTokens: 3000,
+            maxOutputTokens: 8192, // Aumentado para máximo do Gemini (permite detecções muito detalhadas)
           }
         });
 

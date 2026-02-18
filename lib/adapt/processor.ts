@@ -93,6 +93,7 @@ async function analyzeBatch(
       model,
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.3, // Lower temperature for style adaptation
+      max_tokens: 12000, // Aumentado para permitir adaptações muito detalhadas
       response_format: { type: 'json_object' }
     });
 
@@ -110,6 +111,7 @@ async function analyzeBatch(
       }],
       generationConfig: {
         temperature: 0.3,
+        maxOutputTokens: 8192, // Aumentado para máximo do Gemini (permite adaptações muito detalhadas)
         responseMimeType: 'application/json'
       }
     });
