@@ -6,7 +6,6 @@ import path from 'path';
 import os from 'os';
 import { randomUUID } from 'crypto';
 import { NormReference } from '@/lib/norms-update/types';
-import { parseChapterNormsJobId } from '@/lib/norms-update/constants';
 
 // POST /api/norms-update/[id]/apply - Aplica atualizações aceitas
 export async function POST(
@@ -44,27 +43,20 @@ export async function POST(
 
     console.log(`[NORMS-APPLY] Applying ${acceptedReferences.length} updates`);
 
-    const chapterSource = parseChapterNormsJobId(job.document_id);
+    // Job de capítulo: document_id é o versionId; detectamos consultando chapter_versions
+    const { data: chapterVersion } = await supabase
+      .from('chapter_versions')
+      .select('id, file_path, chapter_id')
+      .eq('id', job.document_id)
+      .single();
 
-    if (chapterSource) {
-      const { chapterId, versionId } = chapterSource;
-      const { data: version, error: versionError } = await supabase
-        .from('chapter_versions')
-        .select('id, file_path, chapter_id')
-        .eq('id', versionId)
-        .eq('chapter_id', chapterId)
-        .single();
-
-      if (versionError || !version) {
-        return NextResponse.json(
-          { error: 'Versão do capítulo não encontrada' },
-          { status: 404 }
-        );
-      }
+    if (chapterVersion) {
+      const chapterId = chapterVersion.chapter_id;
+      const versionId = chapterVersion.id;
 
       const { data: fileBlob, error: downloadError } = await supabase.storage
         .from('documents')
-        .download(version.file_path);
+        .download(chapterVersion.file_path);
 
       if (downloadError || !fileBlob) {
         return NextResponse.json(

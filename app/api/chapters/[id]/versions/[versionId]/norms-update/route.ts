@@ -8,12 +8,11 @@ import { extractDocumentStructure } from '@/lib/improvement/document-analyzer';
 import { detectNormsInDocument } from '@/lib/norms-update/norm-detector';
 import { verifyMultipleNorms } from '@/lib/norms-update/norm-verifier';
 import { NormReference } from '@/lib/norms-update/types';
-import { CHAPTER_NORMS_JOB_PREFIX } from '@/lib/norms-update/constants';
 
 /**
  * POST /api/chapters/[chapterId]/versions/[versionId]/norms-update
- * Inicia análise de normas para um capítulo (igual ao fluxo de documentos).
- * Usa LexML/Senado primeiro, depois IA.
+ * Inicia análise de normas para um capítulo. document_id no job usa o versionId (UUID)
+ * para compatibilidade com a coluna UUID; o apply detecta capítulo via chapter_versions.
  */
 export async function POST(
   req: NextRequest,
@@ -55,13 +54,12 @@ export async function POST(
     await fs.writeFile(tempFilePath, Buffer.from(await fileBlob.arrayBuffer()));
 
     const jobId = randomUUID();
-    const documentIdForJob = `${CHAPTER_NORMS_JOB_PREFIX}${chapterId}:${versionId}`;
-
+    // document_id é UUID: usamos versionId; o apply detecta capítulo consultando chapter_versions
     const { error: insertError } = await supabase
       .from('norm_update_jobs')
       .insert({
         id: jobId,
-        document_id: documentIdForJob,
+        document_id: versionId,
         status: 'pending',
         norm_references: [],
         total_references: 0,

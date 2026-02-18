@@ -21,11 +21,13 @@ import {
 import Link from 'next/link';
 import { NormReference } from '@/lib/norms-update/types';
 import { getAIErrorMessage } from '@/lib/ai-error-message';
-import { parseChapterNormsJobId } from '@/lib/norms-update/constants';
 
 type NormUpdateJob = {
   jobId: string;
   documentId: string;
+  source?: 'document' | 'chapter';
+  chapterId?: string;
+  versionId?: string;
   status: 'pending' | 'analyzing' | 'completed' | 'error';
   progress: {
     currentReference: number;
@@ -224,11 +226,11 @@ export default function NormUpdatePage() {
     );
   }
 
-  const chapterSource = parseChapterNormsJobId(job.documentId);
-  const backHref = chapterSource
-    ? `/chapters/${chapterSource.chapterId}/versions/${chapterSource.versionId}`
+  const isChapterJob = job.source === 'chapter' && job.chapterId && job.versionId;
+  const backHref = isChapterJob
+    ? `/chapters/${job.chapterId}/versions/${job.versionId}`
     : `/documents/${job.documentId}`;
-  const backLabel = chapterSource ? 'Voltar ao capítulo' : 'Voltar ao documento';
+  const backLabel = isChapterJob ? 'Voltar ao capítulo' : 'Voltar ao documento';
 
   // Still analyzing
   if (job.status === 'analyzing' || job.status === 'pending') {
@@ -289,7 +291,7 @@ export default function NormUpdatePage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-red-600">
               <XCircle className="h-5 w-5" />
-              Erro ao Analisar {chapterSource ? 'Capítulo' : 'Documento'}
+              Erro ao Analisar {isChapterJob ? 'Capítulo' : 'Documento'}
             </CardTitle>
           </CardHeader>
           <CardContent>

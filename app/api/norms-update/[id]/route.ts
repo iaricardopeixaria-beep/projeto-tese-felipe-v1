@@ -22,10 +22,29 @@ export async function GET(
       );
     }
 
+    // Job de capítulo: document_id é o versionId; detectamos consultando chapter_versions
+    let source: 'document' | 'chapter' = 'document';
+    let chapterId: string | null = null;
+    let versionId: string | null = null;
+    if (job.document_id) {
+      const { data: cv } = await supabase
+        .from('chapter_versions')
+        .select('chapter_id, id')
+        .eq('id', job.document_id)
+        .single();
+      if (cv) {
+        source = 'chapter';
+        chapterId = cv.chapter_id;
+        versionId = cv.id;
+      }
+    }
+
     // Formata resposta
     return NextResponse.json({
       jobId: job.id,
       documentId: job.document_id,
+      source,
+      ...(source === 'chapter' && chapterId && versionId ? { chapterId, versionId } : {}),
       status: job.status,
       progress: {
         currentReference: job.current_reference,

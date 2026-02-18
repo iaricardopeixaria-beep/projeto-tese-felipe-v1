@@ -33,6 +33,8 @@ export interface AdjustConfig {
 export interface UpdateConfig {
   provider: 'gemini';
   model: string;
+  /** Priorizar LexML/Senado/Data.gov.br antes de usar IA (recomendado). */
+  useOfficialSources?: boolean;
 }
 
 export interface ImproveConfig {

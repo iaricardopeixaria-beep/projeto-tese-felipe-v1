@@ -439,10 +439,26 @@ function AdjustConfig({ config, onChange }: any) {
 }
 
 function UpdateConfig({ config, onChange }: any) {
+  const useOfficial = config?.useOfficialSources !== false;
   return (
     <>
       <div className="p-3 border rounded bg-yellow-50 text-sm text-yellow-800">
         ⚠️ Esta operação requer aprovação manual após a análise
+      </div>
+      <div className="flex items-start gap-3 p-3 border rounded bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800">
+        <input
+          type="checkbox"
+          id="update-use-official"
+          checked={useOfficial}
+          onChange={(e) => onChange('useOfficialSources', e.target.checked)}
+          className="mt-1 h-4 w-4 rounded border-gray-300"
+        />
+        <label htmlFor="update-use-official" className="text-sm text-blue-900 dark:text-blue-100 cursor-pointer flex-1">
+          <span className="font-medium">Priorizar fontes oficiais</span>
+          <span className="block text-blue-700 dark:text-blue-300 mt-0.5">
+            Verificar leis e decretos em LexML, Senado Federal e Data.gov.br antes de usar IA. Recomendado para maior precisão.
+          </span>
+        </label>
       </div>
       <ModelSelector config={config} onChange={onChange} providers={['gemini']} />
     </>
@@ -650,7 +666,9 @@ function getConfigSummary(op: PipelineOperation, config: any): string {
     case 'adjust':
       return `Criatividade: ${config.creativity || 5} | ${provider}/${model}`;
     case 'update':
-      return `${provider}/${model}`;
+      return config.useOfficialSources !== false
+        ? `Fontes oficiais + ${provider}/${model}`
+        : `${provider}/${model}`;
     case 'improve':
       return `${provider}/${model}`;
     case 'adapt':
