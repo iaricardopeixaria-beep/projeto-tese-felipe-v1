@@ -146,13 +146,13 @@ export function PipelineWizard({ documentId, documentTitle, open, onOpenChange }
   const updateConfig = (key: string, value: any) => {
     if (!currentOperation) return;
 
-    setConfigs({
-      ...configs,
+    setConfigs((prev) => ({
+      ...prev,
       [currentOperation]: {
-        ...configs[currentOperation],
+        ...prev[currentOperation],
         [key]: value
       }
-    });
+    }));
   };
 
   const handleEditStep = (step: number) => {
