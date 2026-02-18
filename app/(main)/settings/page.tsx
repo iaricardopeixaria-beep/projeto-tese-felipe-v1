@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { Save, CheckCircle, XCircle, Loader2, AlertCircle } from 'lucide-react';
+import { getAIErrorMessage } from '@/lib/ai-error-message';
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<any>(null);
@@ -124,7 +125,7 @@ export default function SettingsPage() {
       toast.success(`${provider.toUpperCase()} conectado! Latência: ${data.latencyMs}ms`);
     } catch (error: any) {
       setTestResults((prev) => ({ ...prev, [provider]: 'error' }));
-      toast.error(`${provider.toUpperCase()}: ${error.message}`);
+      toast.error(`${provider.toUpperCase()}: ${getAIErrorMessage(error, 'Não foi possível conectar')}`);
     } finally {
       setTesting((prev) => ({ ...prev, [provider]: false }));
     }

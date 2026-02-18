@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { Loader2, Rocket } from 'lucide-react';
 import { PipelineOperation, OperationConfigs, OPERATION_METADATA } from '@/lib/pipeline/types';
+import { getAIErrorMessage } from '@/lib/ai-error-message';
 
 type PipelineSelectorProps = {
   documentId: string;
@@ -101,7 +102,7 @@ export function PipelineSelector({ documentId, documentTitle, open, onOpenChange
 
     } catch (error: any) {
       console.error('Pipeline start error:', error);
-      toast.error(error.message);
+      toast.error(getAIErrorMessage(error, 'Falha ao iniciar pipeline'));
       setIsStarting(false);
     }
   };

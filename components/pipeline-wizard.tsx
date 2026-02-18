@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { Loader2, Rocket, ArrowLeft, ArrowRight, SkipForward, Check } from 'lucide-react';
 import { PipelineOperation, OperationConfigs, OPERATION_METADATA } from '@/lib/pipeline/types';
+import { getAIErrorMessage } from '@/lib/ai-error-message';
 
 type PipelineWizardProps = {
   documentId: string;
@@ -138,7 +139,7 @@ export function PipelineWizard({ documentId, documentTitle, open, onOpenChange }
 
     } catch (error: any) {
       console.error('Pipeline start error:', error);
-      toast.error(error.message);
+      toast.error(getAIErrorMessage(error, 'Falha ao iniciar pipeline'));
       setIsStarting(false);
     }
   };

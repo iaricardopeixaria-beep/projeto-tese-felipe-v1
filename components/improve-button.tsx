@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Sparkles, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { getAIErrorMessage } from '@/lib/ai-error-message';
 
 type ImproveButtonProps = {
   documentId: string;
@@ -48,7 +49,7 @@ export function ImproveButton({ documentId, documentTitle }: ImproveButtonProps)
     } catch (error: any) {
       console.error('Improvement error:', error);
       toast.dismiss();
-      toast.error(error.message);
+      toast.error(getAIErrorMessage(error, 'Falha ao iniciar análise'));
       setIsAnalyzing(false);
     }
   };

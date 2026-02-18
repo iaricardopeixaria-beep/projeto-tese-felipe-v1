@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { PipelineJob, PipelineIntermediateDocument, OPERATION_METADATA } from '@/lib/pipeline/types';
+import { getAIErrorMessage } from '@/lib/ai-error-message';
 
 export default function PipelinePage() {
   const params = useParams();
@@ -46,7 +47,7 @@ export default function PipelinePage() {
 
     } catch (error: any) {
       console.error('Error loading pipeline:', error);
-      toast.error(error.message);
+      toast.error(getAIErrorMessage(error, 'Falha ao carregar pipeline'));
     } finally {
       setLoading(false);
     }
@@ -78,7 +79,7 @@ export default function PipelinePage() {
       toast.success('Pipeline pausado');
       loadPipelineStatus();
     } catch (error: any) {
-      toast.error(error.message);
+      toast.error(getAIErrorMessage(error));
     } finally {
       setActionLoading(false);
     }
@@ -97,7 +98,7 @@ export default function PipelinePage() {
       toast.success('Pipeline retomado');
       loadPipelineStatus();
     } catch (error: any) {
-      toast.error(error.message);
+      toast.error(getAIErrorMessage(error));
     } finally {
       setActionLoading(false);
     }
@@ -116,7 +117,7 @@ export default function PipelinePage() {
       toast.success('Pipeline cancelado');
       loadPipelineStatus();
     } catch (error: any) {
-      toast.error(error.message);
+      toast.error(getAIErrorMessage(error));
     } finally {
       setActionLoading(false);
     }
@@ -143,7 +144,7 @@ export default function PipelinePage() {
 
       toast.success('Download iniciado!');
     } catch (error: any) {
-      toast.error(error.message);
+      toast.error(getAIErrorMessage(error));
     }
   };
 
@@ -328,7 +329,7 @@ export default function PipelinePage() {
                     <p>📊 Processados: {result.metadata.items_processed} itens</p>
                   )}
                   {result.metadata.error_message && (
-                    <p className="text-red-500">❌ Erro: {result.metadata.error_message}</p>
+                    <p className="text-red-500">❌ {getAIErrorMessage(result.metadata.error_message)}</p>
                   )}
                 </div>
 
@@ -380,6 +381,9 @@ export default function PipelinePage() {
             <CardContent>
               <p className="text-sm text-gray-400 mb-3">
                 Processando operação {job.current_operation_index + 1} de {job.selected_operations.length}
+              </p>
+              <p className="text-xs text-amber-500/90 mb-3 rounded-md bg-amber-500/10 border border-amber-500/20 px-3 py-2">
+                Conectando e processando com o modelo de IA configurado (ex.: Gemini/OpenAI). Se aparecer erro de limite de uso (429), a aplicação tentará novamente automaticamente — aguarde ou tente mais tarde.
               </p>
               {currentOperationProgress && (
                 <div className="space-y-2">
@@ -442,7 +446,7 @@ export default function PipelinePage() {
           </CardHeader>
           <CardContent>
             <p className="text-sm text-red-400">
-              {job.error_message || 'Erro desconhecido'}
+              {getAIErrorMessage(job.error_message || 'Erro desconhecido')}
             </p>
           </CardContent>
         </Card>

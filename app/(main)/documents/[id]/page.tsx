@@ -21,6 +21,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import Link from 'next/link';
+import { getAIErrorMessage } from '@/lib/ai-error-message';
 
 type Document = {
   id: string;
@@ -164,7 +165,7 @@ export default function DocumentPage() {
       const data = await res.json();
       setAnswers(data.answers);
     } catch (error: any) {
-      toast.error(error.message || 'Erro ao consultar IA');
+      toast.error(getAIErrorMessage(error, 'Erro ao consultar IA'));
     } finally {
       setChatting(false);
     }

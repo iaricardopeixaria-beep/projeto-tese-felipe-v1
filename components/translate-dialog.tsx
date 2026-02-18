@@ -21,6 +21,7 @@ import {
 import { Label } from '@/components/ui/label';
 import { Languages, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { getAIErrorMessage } from '@/lib/ai-error-message';
 
 type TranslationDialogProps = {
   documentId: string;
@@ -98,7 +99,7 @@ export function TranslateDialog({ documentId, documentTitle }: TranslationDialog
 
     } catch (error: any) {
       console.error('Translation error:', error);
-      toast.error(error.message);
+      toast.error(getAIErrorMessage(error, 'Falha ao iniciar tradução'));
       setIsTranslating(false);
     }
   };

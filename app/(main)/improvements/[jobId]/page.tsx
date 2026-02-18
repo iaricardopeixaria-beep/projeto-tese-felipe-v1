@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { ImprovementSuggestion } from '@/lib/improvement/types';
+import { getAIErrorMessage } from '@/lib/ai-error-message';
 
 type ImprovementJob = {
   jobId: string;
@@ -275,7 +276,7 @@ export default function ImprovementPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-muted-foreground">{job.error || 'Erro desconhecido'}</p>
+            <p className="text-muted-foreground">{getAIErrorMessage(job.error || 'Erro desconhecido')}</p>
             <Button className="mt-4" onClick={() => router.push(`/documents/${job.documentId}`)}>
               Voltar ao Documento
             </Button>

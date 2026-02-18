@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { NormReference } from '@/lib/norms-update/types';
+import { getAIErrorMessage } from '@/lib/ai-error-message';
 
 type NormUpdateJob = {
   jobId: string;
@@ -274,7 +275,7 @@ export default function NormUpdatePage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-muted-foreground">{job.error || 'Erro desconhecido'}</p>
+            <p className="text-muted-foreground">{getAIErrorMessage(job.error || 'Erro desconhecido')}</p>
             <Button className="mt-4" onClick={() => router.push(`/documents/${job.documentId}`)}>
               Voltar ao Documento
             </Button>

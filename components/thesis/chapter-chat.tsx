@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ChapterSelector } from './chapter-selector';
 import { CitationBadge, CitationDisplayMode } from './citation-badge';
+import { getAIErrorMessage } from '@/lib/ai-error-message';
 
 type AIProvider = 'openai' | 'gemini' | 'grok';
 
@@ -218,7 +219,7 @@ export function ChapterChat({ currentChapterId, allChapters }: ChapterChatProps)
 
     } catch (error: any) {
       console.error('[CHAT] Error:', error);
-      toast.error(error.message || 'Erro ao enviar mensagem');
+      toast.error(getAIErrorMessage(error, 'Erro ao enviar mensagem'));
 
       // Remove a mensagem do usuário em caso de erro
       setMessages(prev => prev.filter(m => m.id !== userMessage.id));
