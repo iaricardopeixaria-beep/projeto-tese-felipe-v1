@@ -28,6 +28,7 @@ export default function PipelinePage() {
 
   const [job, setJob] = useState<PipelineJob | null>(null);
   const [intermediateDocuments, setIntermediateDocuments] = useState<PipelineIntermediateDocument[]>([]);
+  const [currentOperationProgress, setCurrentOperationProgress] = useState<{ percentage: number; message?: string } | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
 
@@ -41,6 +42,7 @@ export default function PipelinePage() {
       const data = await res.json();
       setJob(data.job);
       setIntermediateDocuments(data.intermediateDocuments || []);
+      setCurrentOperationProgress(data.currentOperationProgress);
 
     } catch (error: any) {
       console.error('Error loading pipeline:', error);
@@ -163,9 +165,24 @@ export default function PipelinePage() {
   }
 
   const currentOp = job.selected_operations[job.current_operation_index];
-  const overallProgress = job.selected_operations.length > 0
-    ? Math.round((job.current_operation_index / job.selected_operations.length) * 100)
-    : 0;
+  
+  // Calculate overall progress considering sub-operation progress
+  const calculateOverallProgress = () => {
+    if (job.selected_operations.length === 0) return 0;
+    
+    // Base progress: completed operations
+    const completedOpsProgress = (job.current_operation_index / job.selected_operations.length) * 100;
+    
+    // If there's a current operation with progress, add its contribution
+    if (job.status === 'running' && currentOperationProgress) {
+      const currentOpProgress = (currentOperationProgress.percentage || 0) / job.selected_operations.length;
+      return Math.min(Math.round(completedOpsProgress + currentOpProgress), 100);
+    }
+    
+    return Math.round(completedOpsProgress);
+  };
+  
+  const overallProgress = calculateOverallProgress();
 
   return (
     <div className="space-y-6">
@@ -288,10 +305,15 @@ export default function PipelinePage() {
                   <span className="text-2xl">{metadata.icon}</span>
                   {metadata.name}
                   {result.status === 'completed' && <CheckCircle2 className="h-5 w-5 text-green-500" />}
+                  {result.status === 'awaiting_approval' && <Clock className="h-5 w-5 text-orange-500" />}
                   {result.status === 'failed' && <XCircle className="h-5 w-5 text-red-500" />}
                 </CardTitle>
                 <CardDescription>
-                  {result.status === 'completed' ? 'Concluído' : 'Falhou'}
+                  {result.status === 'completed' 
+                    ? 'Concluído' 
+                    : result.status === 'awaiting_approval'
+                    ? 'Aguardando aprovação'
+                    : 'Falhou'}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -310,6 +332,25 @@ export default function PipelinePage() {
                   )}
                 </div>
 
+                {result.status === 'awaiting_approval' && result.operationJobId && (
+                  <Button
+                    className="mt-4 bg-gradient-to-r from-orange-600 to-orange-700 hover:from-orange-700 hover:to-orange-800 text-white"
+                    onClick={() => {
+                      const pathMap: Record<string, string> = {
+                        improve: 'improvements',
+                        update: 'norms-update',
+                        translate: 'translations',
+                        adjust: 'adjustments',
+                        adapt: 'adaptations'
+                      };
+                      const path = pathMap[result.operation] || result.operation;
+                      router.push(`/${path}/${result.operationJobId}?pipeline=${jobId}`);
+                    }}
+                  >
+                    <CheckCircle2 className="h-4 w-4 mr-2" />
+                    Revisar e Aprovar
+                  </Button>
+                )}
                 {intermediateDoc && (
                   <Button
                     variant="outline"
@@ -326,8 +367,8 @@ export default function PipelinePage() {
           );
         })}
 
-        {/* Current Operation (if running) */}
-        {job.status === 'running' && currentOp && (
+        {/* Current Operation (if running and not in results yet) */}
+        {job.status === 'running' && currentOp && !job.operation_results.some(r => r.operationIndex === job.current_operation_index) && (
           <Card className="border-blue-500/50">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
@@ -337,9 +378,21 @@ export default function PipelinePage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-sm text-gray-400">
+              <p className="text-sm text-gray-400 mb-3">
                 Processando operação {job.current_operation_index + 1} de {job.selected_operations.length}
               </p>
+              {currentOperationProgress && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-400">Progresso da operação</span>
+                    <span className="font-medium">{currentOperationProgress.percentage}%</span>
+                  </div>
+                  <Progress value={currentOperationProgress.percentage} className="h-2" />
+                  {currentOperationProgress.message && (
+                    <p className="text-xs text-gray-500">{currentOperationProgress.message}</p>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
         )}

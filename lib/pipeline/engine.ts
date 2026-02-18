@@ -734,9 +734,27 @@ export class PipelineEngine {
         adaptConfig.model,
         apiKey,
         async (currentSection: number, totalSections: number, currentBatch?: number, totalBatches?: number) => {
-          const baseProgress = (currentSection / totalSections) * 100;
-          const batchProgress = currentBatch && totalBatches ? (currentBatch / totalBatches) * (100 / totalSections) : 0;
-          const progress = Math.min(Math.round(baseProgress + batchProgress), 100);
+          // Calculate progress correctly:
+          // - Completed sections: (currentSection - 1) / totalSections * 100
+          // - Current section progress: (currentBatch / totalBatches) / totalSections * 100
+          // - Total: sum of both
+          let progress = 0;
+          
+          if (currentSection > 0 && totalSections > 0) {
+            // Progress from completed sections (0 to currentSection - 1)
+            const completedSectionsProgress = ((currentSection - 1) / totalSections) * 100;
+            
+            // Progress from current section (if processing batches)
+            let currentSectionProgress = 0;
+            if (currentBatch && totalBatches && totalBatches > 0) {
+              currentSectionProgress = (currentBatch / totalBatches) * (100 / totalSections);
+            } else if (currentSection === totalSections && !currentBatch) {
+              // Section completed but no batch info
+              currentSectionProgress = (100 / totalSections);
+            }
+            
+            progress = Math.min(Math.round(completedSectionsProgress + currentSectionProgress), 100);
+          }
           
           console.log(`[PIPELINE ADAPT ${adaptJobId}] Progress: Section ${currentSection}/${totalSections}${currentBatch && totalBatches ? `, Batch ${currentBatch}/${totalBatches}` : ''} (${progress}%)`);
           
@@ -754,7 +772,7 @@ export class PipelineEngine {
 
       // Save suggestions to database
       console.log(`[PIPELINE ADAPT ${adaptJobId}] Saving ${suggestions.length} suggestions to database...`);
-      await supabase
+      const { error: updateError } = await supabase
         .from('adapt_jobs')
         .update({
           status: 'completed',
@@ -764,10 +782,33 @@ export class PipelineEngine {
         })
         .eq('id', adaptJobId);
 
+      if (updateError) {
+        console.error(`[PIPELINE ADAPT ${adaptJobId}] Error updating adapt_jobs:`, updateError);
+        throw new Error(`Failed to save suggestions: ${updateError.message}`);
+      }
+
       console.log(`[PIPELINE ADAPT ${adaptJobId}] ✅ Adapt operation completed successfully`);
 
-      // Get results
-      const adaptJob = await this.getAdaptJob(adaptJobId);
+      // Get results (with retry in case of timing issues)
+      let adaptJob;
+      let retries = 3;
+      while (retries > 0) {
+        try {
+          adaptJob = await this.getAdaptJob(adaptJobId);
+          if (adaptJob && adaptJob.suggestions) {
+            break;
+          }
+        } catch (error: any) {
+          console.warn(`[PIPELINE ADAPT ${adaptJobId}] Retry getting adapt job (${retries} retries left):`, error.message);
+          retries--;
+          if (retries > 0) {
+            await this.sleep(500); // Wait 500ms before retry
+          } else {
+            // Use suggestions directly if we can't fetch the job
+            adaptJob = { suggestions: suggestions };
+          }
+        }
+      }
 
       return {
         operation: 'adapt',
@@ -778,22 +819,30 @@ export class PipelineEngine {
         requiresApproval: true,
         approvalStatus: 'pending',
         metadata: {
-          items_generated: adaptJob.suggestions?.length || 0,
+          items_generated: adaptJob?.suggestions?.length || suggestions.length || 0,
           style: adaptConfig.style,
           targetAudience: adaptConfig.targetAudience
         },
         completedAt: new Date().toISOString()
       };
     } catch (error: any) {
-      console.error(`[PIPELINE] Error in adapt operation:`, error);
+      console.error(`[PIPELINE ADAPT ${adaptJobId}] Error in adapt operation:`, error);
+      console.error(`[PIPELINE ADAPT ${adaptJobId}] Error stack:`, error.stack);
+      
       // Update job status to error
-      await supabase
-        .from('adapt_jobs')
-        .update({
-          status: 'error',
-          error_message: error.message || 'Unknown error'
-        })
-        .eq('id', adaptJobId);
+      try {
+        await supabase
+          .from('adapt_jobs')
+          .update({
+            status: 'error',
+            error_message: error.message || 'Unknown error',
+            completed_at: new Date().toISOString()
+          })
+          .eq('id', adaptJobId);
+      } catch (updateError: any) {
+        console.error(`[PIPELINE ADAPT ${adaptJobId}] Failed to update error status:`, updateError);
+      }
+      
       throw error;
     }
   }

@@ -346,8 +346,8 @@ function ReviewStep({ selectedOps, configs, estimatedTime, estimatedCost, onEdit
 
   return (
     <div className="space-y-4">
-      <div className="p-4 border rounded-lg bg-green-50">
-        <h3 className="font-semibold mb-2">✓ {selectedOps.size} Operações Selecionadas</h3>
+      <div className="p-4 border rounded-lg bg-green-50 dark:bg-green-900/20">
+        <h3 className="font-semibold mb-2 text-gray-900 dark:text-gray-100">✓ {selectedOps.size} Operações Selecionadas</h3>
         <div className="space-y-2">
           {orderedSelectedOps.map((op, index) => {
             const metadata = OPERATION_METADATA[op];
@@ -355,12 +355,12 @@ function ReviewStep({ selectedOps, configs, estimatedTime, estimatedCost, onEdit
             const stepNumber = OPERATIONS.indexOf(op);
 
             return (
-              <div key={op} className="flex items-center justify-between p-3 bg-white rounded border">
+              <div key={op} className="flex items-center justify-between p-3 bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-700">
                 <div className="flex items-center gap-3">
                   <span className="text-2xl">{metadata.icon}</span>
                   <div>
-                    <p className="font-medium">{metadata.name}</p>
-                    <p className="text-xs text-gray-500">
+                    <p className="font-medium text-gray-900 dark:text-gray-100">{metadata.name}</p>
+                    <p className="text-xs text-gray-600 dark:text-gray-400">
                       {getConfigSummary(op, config)}
                     </p>
                   </div>
@@ -369,6 +369,7 @@ function ReviewStep({ selectedOps, configs, estimatedTime, estimatedCost, onEdit
                   variant="ghost"
                   size="sm"
                   onClick={() => onEditStep(stepNumber)}
+                  className="text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-gray-100"
                 >
                   Editar
                 </Button>
@@ -379,20 +380,20 @@ function ReviewStep({ selectedOps, configs, estimatedTime, estimatedCost, onEdit
       </div>
 
       {/* Summary */}
-      <div className="border rounded-lg p-4 bg-gray-50">
-        <h3 className="font-semibold mb-3">📊 Resumo do Pipeline</h3>
+      <div className="border rounded-lg p-4 bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700">
+        <h3 className="font-semibold mb-3 text-gray-900 dark:text-gray-100">📊 Resumo do Pipeline</h3>
         <div className="space-y-2 text-sm">
           <p className="flex justify-between">
-            <span className="text-gray-600">Tempo total estimado:</span>
-            <span className="font-medium">~{estimatedTime}-{estimatedTime + 5} min</span>
+            <span className="text-gray-700 dark:text-gray-300">Tempo total estimado:</span>
+            <span className="font-medium text-gray-900 dark:text-gray-100">~{estimatedTime}-{estimatedTime + 5} min</span>
           </p>
           <p className="flex justify-between">
-            <span className="text-gray-600">Custo total estimado:</span>
-            <span className="font-medium">${estimatedCost.toFixed(2)}</span>
+            <span className="text-gray-700 dark:text-gray-300">Custo total estimado:</span>
+            <span className="font-medium text-gray-900 dark:text-gray-100">${estimatedCost.toFixed(2)}</span>
           </p>
           <p className="flex justify-between">
-            <span className="text-gray-600">Operações que requerem aprovação:</span>
-            <span className="font-medium">
+            <span className="text-gray-700 dark:text-gray-300">Operações que requerem aprovação:</span>
+            <span className="font-medium text-gray-900 dark:text-gray-100">
               {orderedSelectedOps.filter(op => op === 'update' || op === 'improve').length}
             </span>
           </p>
