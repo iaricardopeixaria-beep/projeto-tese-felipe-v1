@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { startPipelineExecution } from '@/lib/pipeline/engine';
+import fs from 'fs/promises';
+import path from 'path';
+import os from 'os';
 
 /**
  * POST /api/pipeline/[id]/approve
@@ -123,7 +126,13 @@ async function applyApprovedChanges(
 
     // Save applied document as intermediate
     if (appliedDocumentPath) {
-      // TODO: Upload to pipeline-outputs storage and save to intermediate_documents
+      await saveIntermediateDocument(
+        jobId,
+        currentOperation,
+        operationIndex,
+        appliedDocumentPath,
+        operationResult
+      );
       console.log(`[PIPELINE-APPROVE] Applied document saved: ${appliedDocumentPath}`);
     }
 
@@ -183,13 +192,10 @@ async function applyImproveChanges(
   // The apply API returns the document as download
   // We need to save it temporarily
   const blob = await res.blob();
-  const buffer = Buffer.from(await blob.arrayBuffer());
+  const arrayBuffer = await blob.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
 
   // Save to temp location
-  const fs = require('fs/promises');
-  const path = require('path');
-  const os = require('os');
-
   const tempPath = path.join(os.tmpdir(), `pipeline_improved_${improveJobId}.docx`);
   await fs.writeFile(tempPath, buffer);
 
@@ -214,14 +220,71 @@ async function applyNormsChanges(
   }
 
   const blob = await res.blob();
-  const buffer = Buffer.from(await blob.arrayBuffer());
-
-  const fs = require('fs/promises');
-  const path = require('path');
-  const os = require('os');
+  const arrayBuffer = await blob.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
 
   const tempPath = path.join(os.tmpdir(), `pipeline_norms_${normsJobId}.docx`);
   await fs.writeFile(tempPath, buffer);
 
   return tempPath;
+}
+
+/**
+ * Save intermediate document to Storage and database
+ */
+async function saveIntermediateDocument(
+  pipelineJobId: string,
+  operation: string,
+  operationIndex: number,
+  documentPath: string,
+  operationResult: any
+): Promise<void> {
+  try {
+    // Read document
+    const fileBuffer = await fs.readFile(documentPath);
+    const fileSize = fileBuffer.length;
+
+    // Upload to Storage
+    const storagePath = `${pipelineJobId}/${operationIndex}_${operation}_${Date.now()}.docx`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('pipeline-outputs')
+      .upload(storagePath, fileBuffer, {
+        contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        upsert: true
+      });
+
+    if (uploadError) {
+      console.error(`[PIPELINE-APPROVE] Failed to upload intermediate document:`, uploadError);
+      throw new Error(`Failed to upload: ${uploadError.message}`);
+    }
+
+    // Save to database
+    const { error: insertError } = await supabase
+      .from('pipeline_intermediate_documents')
+      .insert({
+        pipeline_job_id: pipelineJobId,
+        operation_name: operation,
+        operation_index: operationIndex,
+        storage_path: storagePath,
+        file_size_bytes: fileSize,
+        operation_job_id: operationResult.operationJobId,
+        metadata: {
+          ...operationResult.metadata,
+          approvedItems: operationResult.approvedItems,
+          appliedAt: new Date().toISOString()
+        }
+      });
+
+    if (insertError) {
+      console.error(`[PIPELINE-APPROVE] Failed to save intermediate document record:`, insertError);
+      throw new Error(`Failed to save record: ${insertError.message}`);
+    }
+
+    console.log(`[PIPELINE-APPROVE] Saved intermediate document: ${storagePath}`);
+
+  } catch (error: any) {
+    console.error(`[PIPELINE-APPROVE] Error saving intermediate document:`, error);
+    throw error; // Re-throw to handle in caller
+  }
 }
