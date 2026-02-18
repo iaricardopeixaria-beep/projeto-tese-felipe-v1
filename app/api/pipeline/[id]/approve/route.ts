@@ -121,6 +121,16 @@ async function applyApprovedChanges(
         operationResult.operationJobId,
         approvedItems
       );
+    } else if (currentOperation === 'adjust') {
+      appliedDocumentPath = await applyAdjustChanges(
+        operationResult.operationJobId,
+        approvedItems
+      );
+    } else if (currentOperation === 'adapt') {
+      appliedDocumentPath = await applyAdaptChanges(
+        operationResult.operationJobId,
+        approvedItems
+      );
     }
     // translate doesn't need approval/apply - it just translates
 
@@ -224,6 +234,60 @@ async function applyNormsChanges(
   const buffer = Buffer.from(arrayBuffer);
 
   const tempPath = path.join(os.tmpdir(), `pipeline_norms_${normsJobId}.docx`);
+  await fs.writeFile(tempPath, buffer);
+
+  return tempPath;
+}
+
+/**
+ * Apply adjust changes (call existing API)
+ */
+async function applyAdjustChanges(
+  adjustJobId: string,
+  approvedSuggestionIds: string[]
+): Promise<string> {
+  const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3001'}/api/adjust/${adjustJobId}/apply`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ acceptedSuggestionIds: approvedSuggestionIds })
+  });
+
+  if (!res.ok) {
+    throw new Error('Failed to apply adjust changes');
+  }
+
+  const blob = await res.blob();
+  const arrayBuffer = await blob.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+
+  const tempPath = path.join(os.tmpdir(), `pipeline_adjust_${adjustJobId}.docx`);
+  await fs.writeFile(tempPath, buffer);
+
+  return tempPath;
+}
+
+/**
+ * Apply adapt changes (call existing API)
+ */
+async function applyAdaptChanges(
+  adaptJobId: string,
+  approvedSuggestionIds: string[]
+): Promise<string> {
+  const res = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3001'}/api/adapt/${adaptJobId}/apply`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ acceptedSuggestionIds: approvedSuggestionIds })
+  });
+
+  if (!res.ok) {
+    throw new Error('Failed to apply adapt changes');
+  }
+
+  const blob = await res.blob();
+  const arrayBuffer = await blob.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+
+  const tempPath = path.join(os.tmpdir(), `pipeline_adapt_${adaptJobId}.docx`);
   await fs.writeFile(tempPath, buffer);
 
   return tempPath;
