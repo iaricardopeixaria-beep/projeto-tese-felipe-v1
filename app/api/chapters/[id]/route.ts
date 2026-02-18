@@ -56,7 +56,7 @@ export async function GET(
         } : null,
         totalVersions: chapter.total_versions
       },
-      versions: (versions || []).map(v => ({
+      versions: (versions || []).map((v: any) => ({
         id: v.id,
         versionNumber: v.version_number,
         parentVersionId: v.parent_version_id,
@@ -205,6 +205,62 @@ export async function DELETE(
       );
     }
 
+    // Fetch all versions to get their file paths before deletion
+    const { data: versions } = await supabase
+      .from('chapter_versions')
+      .select('file_path')
+      .eq('chapter_id', id);
+
+    // Delete files from Supabase Storage
+    if (versions && versions.length > 0) {
+      const filePaths = versions
+        .map((v: any) => v.file_path)
+        .filter((path: any): path is string => path !== null && path !== undefined);
+
+      if (filePaths.length > 0) {
+        try {
+          const { data: removedFiles, error: storageError } = await supabase.storage
+            .from('documents')
+            .remove(filePaths);
+
+          if (storageError) {
+            console.error(`[CHAPTERS] Error deleting files from Storage:`, storageError);
+            // Continue with chapter deletion even if storage deletion fails
+          } else {
+            console.log(`[CHAPTERS] Deleted ${filePaths.length} file(s) from Storage`);
+          }
+        } catch (storageErr: any) {
+          console.error(`[CHAPTERS] Exception deleting files from Storage:`, storageErr);
+          // Continue with chapter deletion even if storage deletion fails
+        }
+      }
+    }
+
+    // Also try to delete the entire directory (in case there are orphaned files)
+    const directoryPath = `theses/${chapter.thesis_id}/chapters/${id}/`;
+    try {
+      // List all files in the directory
+      const { data: directoryFiles, error: listError } = await supabase.storage
+        .from('documents')
+        .list(directoryPath);
+
+      if (!listError && directoryFiles && directoryFiles.length > 0) {
+        const filesToDelete = directoryFiles.map((file: any) => `${directoryPath}${file.name}`);
+        const { error: removeDirError } = await supabase.storage
+          .from('documents')
+          .remove(filesToDelete);
+
+        if (removeDirError) {
+          console.error(`[CHAPTERS] Error deleting directory files:`, removeDirError);
+        } else {
+          console.log(`[CHAPTERS] Deleted ${filesToDelete.length} additional file(s) from directory`);
+        }
+      }
+    } catch (dirErr: any) {
+      console.error(`[CHAPTERS] Exception cleaning up directory:`, dirErr);
+      // Continue with chapter deletion even if directory cleanup fails
+    }
+
     // Delete the chapter (CASCADE will delete versions and chunks)
     const { error } = await supabase
       .from('chapters')
@@ -214,9 +270,6 @@ export async function DELETE(
     if (error) throw error;
 
     console.log(`[CHAPTERS] Deleted chapter: ${id} - "${chapter.title}"`);
-
-    // TODO: Delete files from Supabase Storage
-    // Files are in: theses/{thesisId}/chapters/{chapterId}/
 
     return NextResponse.json({
       message: 'Chapter deleted successfully',
