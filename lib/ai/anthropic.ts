@@ -24,7 +24,7 @@ export async function anthropicChat(params: {
   maxTokens?: number;
   temperature?: number;
 }): Promise<{ text: string; inputTokens: number; outputTokens: number }> {
-  const client = new Anthropic({ apiKey });
+  const client = new Anthropic({ apiKey: params.apiKey });
   const response = await client.messages.create({
     model: params.model,
     max_tokens: params.maxTokens ?? 8192,
@@ -51,7 +51,7 @@ export async function anthropicChatWithWebSearch(params: {
   maxTokens?: number;
   maxWebUses?: number;
 }): Promise<{ text: string; inputTokens: number; outputTokens: number }> {
-  const client = new Anthropic({ apiKey });
+  const client = new Anthropic({ apiKey: params.apiKey });
   const tools: Anthropic.Messages.ToolUnion[] = [
     {
       type: 'web_search_20250305',
