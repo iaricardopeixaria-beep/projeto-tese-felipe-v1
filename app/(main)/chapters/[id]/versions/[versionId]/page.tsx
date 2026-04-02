@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, FileText, Clock, Layers, Download, Info, Sparkles, Languages, Sliders, Wand2, RefreshCw, SearchCheck, Loader2 } from 'lucide-react';
+import { ArrowLeft, FileText, Clock, Layers, Download, Info, Languages, Sliders, Wand2, SearchCheck, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   Dialog,
@@ -17,7 +17,6 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -70,26 +69,20 @@ export default function ChapterVersionPage() {
     Partial<Record<ChapterOpAIProvider, string[]>> | null
   >(null);
 
-  const [improveProvider, setImproveProvider] = useState<ChapterOpAIProvider>('openai');
-  const [improveModel, setImproveModel] = useState('');
   const [translateProvider, setTranslateProvider] = useState<ChapterOpAIProvider>('openai');
   const [translateModel, setTranslateModel] = useState('');
   const [adjustProvider, setAdjustProvider] = useState<ChapterOpAIProvider>('gemini');
   const [adjustModel, setAdjustModel] = useState('');
   const [adaptProvider, setAdaptProvider] = useState<ChapterOpAIProvider>('openai');
   const [adaptModel, setAdaptModel] = useState('');
-  const [updateProvider, setUpdateProvider] = useState<ChapterOpAIProvider>('gemini');
-  const [updateModel, setUpdateModel] = useState('');
   const [revisarNormsProvider, setRevisarNormsProvider] =
     useState<ChapterOpAIProvider>('gemini');
   const [revisarNormsModel, setRevisarNormsModel] = useState('');
 
   // Operation states
-  const [improveDialogOpen, setImproveDialogOpen] = useState(false);
   const [translateDialogOpen, setTranslateDialogOpen] = useState(false);
   const [adjustDialogOpen, setAdjustDialogOpen] = useState(false);
   const [adaptDialogOpen, setAdaptDialogOpen] = useState(false);
-  const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
   const [revisarDialogOpen, setRevisarDialogOpen] = useState(false);
   const [revisarAtualizarNormas, setRevisarAtualizarNormas] = useState(false);
   const [revisarLoading, setRevisarLoading] = useState(false);
@@ -97,11 +90,9 @@ export default function ChapterVersionPage() {
   const [processing, setProcessing] = useState(false);
 
   // References
-  const [improveReferences, setImproveReferences] = useState<ReferenceItem[]>([]);
   const [translateReferences, setTranslateReferences] = useState<ReferenceItem[]>([]);
   const [adjustReferences, setAdjustReferences] = useState<ReferenceItem[]>([]);
   const [adaptReferences, setAdaptReferences] = useState<ReferenceItem[]>([]);
-  const [updateReferences, setUpdateReferences] = useState<ReferenceItem[]>([]);
 
   // Prompts for operations
   const [adjustPrompt, setAdjustPrompt] = useState('');
@@ -189,11 +180,9 @@ export default function ChapterVersionPage() {
         const m = data.settings?.models || {};
         setSettingsModels(m);
         const first = (p: ChapterOpAIProvider) => modelsForProvider(m, p)[0] || '';
-        setImproveModel((prev) => prev || first('openai'));
         setTranslateModel((prev) => prev || first('openai'));
         setAdjustModel((prev) => prev || first('gemini'));
         setAdaptModel((prev) => prev || first('openai'));
-        setUpdateModel((prev) => prev || first('gemini'));
         setRevisarNormsModel((prev) => prev || first('gemini'));
       } catch (e) {
         console.error('[VERSION-PAGE] Settings load error:', e);
@@ -237,56 +226,6 @@ export default function ChapterVersionPage() {
     } catch (error: any) {
       console.error('[DOWNLOAD] Error:', error);
       toast.error(error.message || 'Erro ao fazer download');
-    }
-  };
-
-  const handleImprove = async () => {
-    if (!improveModel) {
-      toast.error('Selecione o provedor e o modelo de IA');
-      return;
-    }
-    try {
-      setProcessing(true);
-      toast.info('Iniciando análise de melhorias...');
-
-      // Convert ReferenceItem to API format
-      const referencesForAPI = improveReferences.map(ref => ({
-        type: ref.type,
-        title: ref.title,
-        description: ref.description,
-        url: ref.url,
-        filePath: ref.filePath,
-        fileName: ref.fileName,
-        fileSize: ref.fileSize,
-        mimeType: ref.mimeType,
-      }));
-
-      const response = await fetch(`/api/chapters/${chapterId}/improve`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          versionId,
-          provider: improveProvider,
-          model: improveModel,
-          references: referencesForAPI,
-          contextVersionIds
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error('Falha ao iniciar análise');
-      }
-
-      const data = await response.json();
-      setImproveDialogOpen(false);
-
-      // Redirecionar para a página de melhorias
-      router.push(`/chapters/${chapterId}/improvements/${data.jobId}`);
-
-    } catch (error: any) {
-      console.error('[IMPROVE] Error:', error);
-      toast.error(error.message || 'Erro ao iniciar análise');
-      setProcessing(false);
     }
   };
 
@@ -456,61 +395,6 @@ export default function ChapterVersionPage() {
     } catch (error: any) {
       console.error('[ADAPT] Error:', error);
       toast.error(error.message || 'Erro ao iniciar adaptação');
-      setProcessing(false);
-    }
-  };
-
-  const handleUpdate = async () => {
-    // Update operation uses references to update content
-    // References are optional but recommended
-    if (updateReferences.length === 0) {
-      toast.warning('Nenhuma referência adicionada. Recomenda-se adicionar materiais de referência para atualização.');
-    }
-    if (!updateModel) {
-      toast.error('Selecione o provedor e o modelo de IA');
-      return;
-    }
-
-    try {
-      setProcessing(true);
-      toast.info('Iniciando atualização...');
-
-      const referencesForAPI = updateReferences.map(ref => ({
-        type: ref.type,
-        title: ref.title,
-        description: ref.description,
-        url: ref.url,
-        filePath: ref.filePath,
-        fileName: ref.fileName,
-        fileSize: ref.fileSize,
-        mimeType: ref.mimeType,
-      }));
-
-      const response = await fetch(`/api/chapters/${chapterId}/update`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          versionId,
-          provider: updateProvider,
-          model: updateModel,
-          references: referencesForAPI,
-          contextVersionIds
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error('Falha ao iniciar atualização');
-      }
-
-      const data = await response.json();
-      setUpdateDialogOpen(false);
-
-      // Redirecionar para a página de atualização
-      router.push(`/chapters/${chapterId}/update/${data.jobId}`);
-
-    } catch (error: any) {
-      console.error('[UPDATE] Error:', error);
-      toast.error(error.message || 'Erro ao iniciar atualização');
       setProcessing(false);
     }
   };
@@ -791,77 +675,6 @@ export default function ChapterVersionPage() {
               Fazer Download
             </Button>
 
-            {/* Improve Dialog */}
-            <Dialog open={improveDialogOpen} onOpenChange={setImproveDialogOpen}>
-              <DialogTrigger asChild>
-                <Button
-                  variant="outline"
-                  className="w-full justify-start"
-                >
-                  <Sparkles className="h-4 w-4 mr-2" />
-                  Melhorar Texto
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-3xl max-h-[90vh]">
-                <DialogHeader>
-                  <DialogTitle>Melhorar Capítulo</DialogTitle>
-                  <DialogDescription>
-                    Analisar o capítulo para identificar oportunidades de melhoria. Uma nova versão será criada.
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="px-6 pt-2">
-                  <ChapterOperationAiFields
-                    provider={improveProvider}
-                    model={improveModel}
-                    onProviderChange={(p) => {
-                      setImproveProvider(p);
-                      setImproveModel(modelsForProvider(settingsModels, p)[0] || '');
-                    }}
-                    onModelChange={setImproveModel}
-                    settingsModels={settingsModels}
-                    disabled={processing}
-                  />
-                </div>
-                <ScrollArea className="max-h-[60vh] pr-4">
-                  <div className="space-y-4 py-4">
-                    {allChapters.length > 0 && (
-                      <ContextSelector
-                        chapters={allChapters}
-                        currentChapterId={chapterId}
-                        selectedVersionIds={contextVersionIds}
-                        onSelectionChange={setContextVersionIds}
-                      />
-                    )}
-                    <div className="space-y-2">
-                      <Label>Materiais de Referência (Opcional)</Label>
-                      <p className="text-sm text-muted-foreground">
-                        Adicione links ou arquivos para fornecer contexto adicional à análise
-                      </p>
-                    </div>
-                    <ReferenceManager
-                      references={improveReferences}
-                      onChange={setImproveReferences}
-                    />
-                  </div>
-                </ScrollArea>
-                <DialogFooter>
-                  <Button
-                    variant="ghost"
-                    onClick={() => setImproveDialogOpen(false)}
-                    disabled={processing}
-                  >
-                    Cancelar
-                  </Button>
-                  <Button
-                    onClick={handleImprove}
-                    disabled={processing || !improveModel}
-                  >
-                    {processing ? 'Processando...' : 'Iniciar Análise'}
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-
             {/* Translate Dialog */}
             <Dialog open={translateDialogOpen} onOpenChange={setTranslateDialogOpen}>
               <DialogTrigger asChild>
@@ -950,14 +763,14 @@ export default function ChapterVersionPage() {
                   className="w-full justify-start"
                 >
                   <Sliders className="h-4 w-4 mr-2" />
-                  Ajustar
+                  Ajuste livre
                 </Button>
               </DialogTrigger>
               <DialogContent className="max-w-3xl max-h-[90vh]">
                 <DialogHeader>
-                  <DialogTitle>Ajustar Capítulo</DialogTitle>
+                  <DialogTitle>Ajuste livre no capítulo</DialogTitle>
                   <DialogDescription>
-                    Descreva especificamente o que deseja ajustar. Uma nova versão será criada.
+                    A IA segue apenas as instruções que você escrever abaixo (prompt). Uma nova versão será criada.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="px-6 pt-2">
@@ -984,7 +797,7 @@ export default function ChapterVersionPage() {
                       <div className="flex items-start gap-2">
                         <Info className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
                         <div className="space-y-1">
-                          <p className="text-sm font-medium text-amber-900">Como funciona o Ajuste</p>
+                          <p className="text-sm font-medium text-amber-900">Como funciona o ajuste livre</p>
                           <p className="text-sm text-amber-700">
                             A IA irá fazer APENAS o que você pedir nas instruções abaixo. O nível de criatividade controla
                             <strong> como suas instruções são aplicadas</strong>, não se deve fazer melhorias extras.
@@ -1096,7 +909,7 @@ export default function ChapterVersionPage() {
                     onClick={handleAdjust}
                     disabled={processing || !adjustPrompt.trim() || !adjustModel}
                   >
-                    {processing ? 'Processando...' : 'Iniciar Ajuste'}
+                    {processing ? 'Processando...' : 'Iniciar ajuste livre'}
                   </Button>
                 </DialogFooter>
               </DialogContent>
@@ -1110,14 +923,14 @@ export default function ChapterVersionPage() {
                   className="w-full justify-start"
                 >
                   <Wand2 className="h-4 w-4 mr-2" />
-                  Adaptar
+                  Adaptar texto
                 </Button>
               </DialogTrigger>
               <DialogContent className="max-w-3xl max-h-[90vh]">
                 <DialogHeader>
-                  <DialogTitle>Adaptar Capítulo</DialogTitle>
+                  <DialogTitle>Adaptar texto do capítulo</DialogTitle>
                   <DialogDescription>
-                    Adapte o capítulo para um estilo ou público-alvo diferente. Uma nova versão será criada.
+                    Adapte o texto para um estilo ou público-alvo diferente. Uma nova versão será criada.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="px-6 pt-2">
@@ -1221,17 +1034,17 @@ export default function ChapterVersionPage() {
                   className="w-full justify-start"
                 >
                   <SearchCheck className="h-4 w-4 mr-2" />
-                  Revisar
+                  Revisar leis
                 </Button>
               </DialogTrigger>
               <DialogContent className="max-w-md">
                 <DialogHeader>
                   <DialogTitle className="flex items-center gap-2">
                     <SearchCheck className="h-5 w-5" />
-                    Revisar Capítulo
+                    Revisar leis no capítulo
                   </DialogTitle>
                   <DialogDescription>
-                    Escolha as opções de revisão antes de considerar a versão final. Igual ao fluxo em documentos.
+                    Verifique leis e normas citadas em relação à vigência. Igual ao fluxo em documentos.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 py-4">
@@ -1280,93 +1093,6 @@ export default function ChapterVersionPage() {
                     ) : (
                       'Iniciar revisão'
                     )}
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-
-            {/* Update Dialog */}
-            <Dialog open={updateDialogOpen} onOpenChange={setUpdateDialogOpen}>
-              <DialogTrigger asChild>
-                <Button
-                  variant="outline"
-                  className="w-full justify-start"
-                >
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  Atualizar
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-3xl max-h-[90vh]">
-                <DialogHeader>
-                  <DialogTitle>Atualizar Capítulo</DialogTitle>
-                  <DialogDescription>
-                    Atualize o capítulo com base em materiais de referência (links, arquivos, documentos). Uma nova versão será criada.
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="px-6 pt-2">
-                  <ChapterOperationAiFields
-                    provider={updateProvider}
-                    model={updateModel}
-                    onProviderChange={(p) => {
-                      setUpdateProvider(p);
-                      setUpdateModel(modelsForProvider(settingsModels, p)[0] || '');
-                    }}
-                    onModelChange={setUpdateModel}
-                    settingsModels={settingsModels}
-                    disabled={processing}
-                  />
-                </div>
-                <ScrollArea className="max-h-[60vh] pr-4">
-                  <div className="space-y-4 py-4">
-                    {allChapters.length > 0 && (
-                      <ContextSelector
-                        chapters={allChapters}
-                        currentChapterId={chapterId}
-                        selectedVersionIds={contextVersionIds}
-                        onSelectionChange={setContextVersionIds}
-                      />
-                    )}
-                    <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                      <div className="flex items-start gap-2">
-                        <Info className="h-5 w-5 text-blue-600 mt-0.5 flex-shrink-0" />
-                        <div className="space-y-1">
-                          <p className="text-sm font-medium text-blue-900">Como funciona a atualização</p>
-                          <p className="text-sm text-blue-700">
-                            A IA analisará o capítulo atual e os materiais de referência fornecidos,
-                            identificando informações desatualizadas, novos dados ou melhorias baseadas nas referências.
-                          </p>
-                          <p className="text-sm text-blue-700 mt-2">
-                            Recomenda-se adicionar pelo menos um material de referência para melhores resultados.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label>Materiais de Referência</Label>
-                      <p className="text-sm text-muted-foreground">
-                        Adicione links, arquivos ou documentos com as informações atualizadas
-                      </p>
-                      <ReferenceManager
-                        references={updateReferences}
-                        onChange={setUpdateReferences}
-                      />
-                    </div>
-                  </div>
-                </ScrollArea>
-                <DialogFooter>
-                  <Button
-                    variant="ghost"
-                    onClick={() => setUpdateDialogOpen(false)}
-                    disabled={processing}
-                  >
-                    Cancelar
-                  </Button>
-                  <Button
-                    onClick={handleUpdate}
-                    disabled={processing || !updateModel}
-                  >
-                    {processing ? 'Processando...' : 'Iniciar Atualização'}
                   </Button>
                 </DialogFooter>
               </DialogContent>

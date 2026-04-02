@@ -230,8 +230,8 @@ export interface PipelineTemplate {
 
 export const OPERATION_METADATA = {
   adjust: {
-    name: 'Ajustar',
-    description: 'Seguir instruções customizadas',
+    name: 'Ajuste livre',
+    description: 'Alterar o texto conforme suas instruções (prompt)',
     icon: '⚙️',
     color: 'red',
     estimatedMinutes: 3
@@ -251,8 +251,8 @@ export const OPERATION_METADATA = {
     estimatedMinutes: 4
   },
   adapt: {
-    name: 'Adaptar',
-    description: 'Reorganizar para facilitar leitura',
+    name: 'Adaptar texto',
+    description: 'Adaptar estilo e tom do texto ao público desejado',
     icon: '📐',
     color: 'purple',
     estimatedMinutes: 3
