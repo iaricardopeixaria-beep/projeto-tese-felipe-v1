@@ -123,11 +123,11 @@ export default function HomePage() {
             <TabsList className="grid w-full max-w-md grid-cols-2 bg-white/5 p-1">
               <TabsTrigger value="theses" className="data-[state=active]:bg-red-600">
                 <BookOpen className="h-4 w-4 mr-2" />
-                Teses ({theses.length})
+                Teses com capítulos ({theses.length})
               </TabsTrigger>
               <TabsTrigger value="projects" className="data-[state=active]:bg-red-600">
                 <Folder className="h-4 w-4 mr-2" />
-                Projetos ({projects.length})
+                Teses completas ({projects.length})
               </TabsTrigger>
             </TabsList>
 
