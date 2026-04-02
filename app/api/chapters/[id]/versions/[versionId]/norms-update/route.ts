@@ -8,6 +8,7 @@ import { extractDocumentStructure } from '@/lib/improvement/document-analyzer';
 import { detectNormsInDocument } from '@/lib/norms-update/norm-detector';
 import { verifyMultipleNorms } from '@/lib/norms-update/norm-verifier';
 import { NormReference } from '@/lib/norms-update/types';
+import { appendNormJobLog } from '@/lib/norms-update/job-log';
 
 /**
  * POST /api/chapters/[chapterId]/versions/[versionId]/norms-update
@@ -125,6 +126,8 @@ async function processNormsUpdate(
       .update({ status: 'analyzing', started_at: new Date().toISOString() })
       .eq('id', jobId);
 
+    await appendNormJobLog(jobId, 'Início da análise de normas (capítulo)');
+    await appendNormJobLog(jobId, 'Extraindo estrutura do documento…');
     const { structure, paragraphs } = await extractDocumentStructure(tempFilePath);
     const paragraphsWithContext = paragraphs
       .filter((p: any) => !p.isHeader)
@@ -134,11 +137,22 @@ async function processNormsUpdate(
         chapterTitle: getCurrentChapter(paragraphs, p.index, structure)
       }));
 
+    await appendNormJobLog(
+      jobId,
+      `Detectando normas em ${paragraphsWithContext.length} parágrafo(s)…`
+    );
     const references = await detectNormsInDocument(
       paragraphsWithContext,
       provider,
       model,
       apiKey
+    );
+
+    await appendNormJobLog(
+      jobId,
+      references.length === 0
+        ? 'Nenhuma referência normativa detectada.'
+        : `Detectadas ${references.length} referência(s) normativa(s).`
     );
 
     await supabase
@@ -147,6 +161,7 @@ async function processNormsUpdate(
       .eq('id', jobId);
 
     if (references.length === 0) {
+      await appendNormJobLog(jobId, 'Análise finalizada (sem normas a verificar).');
       await supabase
         .from('norm_update_jobs')
         .update({
@@ -159,6 +174,12 @@ async function processNormsUpdate(
       return;
     }
 
+    await appendNormJobLog(
+      jobId,
+      'Verificando status (fontes oficiais e IA, se necessário)…'
+    );
+
+    let lastLoggedProgressBracket = -1;
     const verifiedReferences = await verifyMultipleNorms(
       references,
       provider,
@@ -167,6 +188,14 @@ async function processNormsUpdate(
       undefined,
       async (current: number, total: number) => {
         const percentage = 10 + Math.floor((current / total) * 90);
+        const bracket = Math.floor(percentage / 15);
+        if (bracket > lastLoggedProgressBracket || current === total) {
+          lastLoggedProgressBracket = bracket;
+          await appendNormJobLog(
+            jobId,
+            `Verificação: ${current}/${total} referências (~${percentage}%)`
+          );
+        }
         await supabase
           .from('norm_update_jobs')
           .update({ current_reference: current, progress_percentage: percentage })
@@ -197,9 +226,18 @@ async function processNormsUpdate(
       })
       .eq('id', jobId);
 
+    await appendNormJobLog(
+      jobId,
+      'Análise concluída. Revise os resultados e aplique as alterações desejadas.'
+    );
     await fs.unlink(tempFilePath).catch(() => {});
   } catch (error: any) {
     console.error('[NORMS] Chapter norms processing error:', error);
+    await appendNormJobLog(
+      jobId,
+      `Erro: ${error.message || String(error)}`,
+      'error'
+    );
     await supabase
       .from('norm_update_jobs')
       .update({

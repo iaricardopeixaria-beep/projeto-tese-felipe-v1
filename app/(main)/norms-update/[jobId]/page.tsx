@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
 import {
   Loader2,
@@ -22,6 +23,12 @@ import Link from 'next/link';
 import { NormReference } from '@/lib/norms-update/types';
 import { getAIErrorMessage } from '@/lib/ai-error-message';
 
+type ActivityLogEntry = {
+  at: string;
+  level?: 'info' | 'warn' | 'error';
+  message: string;
+};
+
 type NormUpdateJob = {
   jobId: string;
   documentId: string;
@@ -34,6 +41,7 @@ type NormUpdateJob = {
     totalReferences: number;
     percentage: number;
   };
+  activityLog?: ActivityLogEntry[];
   references: NormReference[];
   stats: {
     total: number;
@@ -55,6 +63,42 @@ const STATUS_INFO = {
   substituida: { label: 'Substituída', color: 'bg-orange-500', icon: RefreshCw },
   desconhecido: { label: 'Desconhecido', color: 'bg-gray-500', icon: Info }
 };
+
+function ActivityLogPanel({ entries }: { entries: ActivityLogEntry[] }) {
+  if (!entries.length) return null;
+  return (
+    <Card>
+      <CardHeader className="py-3">
+        <CardTitle className="text-base">Atividade</CardTitle>
+        <CardDescription>Etapa atual do processamento no servidor</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <ScrollArea className="h-56 w-full rounded-md border bg-muted/30 p-3 text-sm font-mono">
+          <ul className="space-y-2 pr-3">
+            {entries.map((e, i) => (
+              <li key={`${e.at}-${i}`} className="break-words">
+                <span className="text-muted-foreground">
+                  {new Date(e.at).toLocaleTimeString('pt-BR')}
+                </span>{' '}
+                <span
+                  className={
+                    e.level === 'error'
+                      ? 'text-red-600'
+                      : e.level === 'warn'
+                        ? 'text-amber-600'
+                        : ''
+                  }
+                >
+                  {e.message}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </ScrollArea>
+      </CardContent>
+    </Card>
+  );
+}
 
 const TYPE_LABELS: Record<string, string> = {
   lei: 'Lei',
@@ -82,7 +126,7 @@ export default function NormUpdatePage() {
   useEffect(() => {
     loadJob();
     const interval = setInterval(() => {
-      if (job?.status === 'analyzing') {
+      if (job?.status === 'analyzing' || job?.status === 'pending') {
         loadJob();
       }
     }, 3000);
@@ -268,6 +312,8 @@ export default function NormUpdatePage() {
             </div>
           </CardContent>
         </Card>
+
+        <ActivityLogPanel entries={job.activityLog ?? []} />
       </div>
     );
   }
@@ -294,8 +340,9 @@ export default function NormUpdatePage() {
               Erro ao Analisar {isChapterJob ? 'Capítulo' : 'Documento'}
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
             <p className="text-muted-foreground">{getAIErrorMessage(job.error || 'Erro desconhecido')}</p>
+            <ActivityLogPanel entries={job.activityLog ?? []} />
             <Button className="mt-4" onClick={() => router.push(backHref)}>
               {backLabel}
             </Button>
@@ -352,6 +399,8 @@ export default function NormUpdatePage() {
           )}
         </Button>
       </div>
+
+      <ActivityLogPanel entries={job.activityLog ?? []} />
 
       {/* Summary Card */}
       <Card>

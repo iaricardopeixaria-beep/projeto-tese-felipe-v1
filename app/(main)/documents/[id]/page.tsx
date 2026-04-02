@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -19,7 +19,8 @@ import {
   Download,
   Languages,
   ArrowLeft,
-  Sparkles
+  Sparkles,
+  Gavel
 } from 'lucide-react';
 import Link from 'next/link';
 import { getAIErrorMessage } from '@/lib/ai-error-message';
@@ -63,13 +64,36 @@ export default function DocumentPage() {
     anthropic: ''
   });
   const [pipelineJobs, setPipelineJobs] = useState<any[]>([]);
+  const [normJobs, setNormJobs] = useState<any[]>([]);
+
+  const loadNormJobs = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/documents/${documentId}/norm-jobs`);
+      if (res.ok) {
+        const data = await res.json();
+        setNormJobs(data.jobs || []);
+      }
+    } catch (e) {
+      console.error('Norm jobs load error:', e);
+    }
+  }, [documentId]);
 
   useEffect(() => {
     loadDocument();
     loadSettings();
     loadTranslations();
     loadPipelineJobs();
-  }, [documentId]);
+    loadNormJobs();
+  }, [documentId, loadNormJobs]);
+
+  const hasActiveNormJob = normJobs.some(
+    (j) => j.status === 'analyzing' || j.status === 'pending'
+  );
+  useEffect(() => {
+    if (!hasActiveNormJob) return;
+    const id = setInterval(loadNormJobs, 4000);
+    return () => clearInterval(id);
+  }, [hasActiveNormJob, loadNormJobs]);
 
   const loadDocument = async () => {
     try {
@@ -251,7 +275,7 @@ export default function DocumentPage() {
         </div>
       </div>
 
-      {(translations.length > 0 || pipelineJobs.length > 0) && (
+      {(translations.length > 0 || pipelineJobs.length > 0 || normJobs.length > 0) && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -264,6 +288,47 @@ export default function DocumentPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
+              {/* Normas */}
+              {normJobs.map((job) => (
+                <Link
+                  key={`norm-${job.id}`}
+                  href={`/norms-update/${job.id}`}
+                  className="block"
+                >
+                  <div className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50 transition-colors">
+                    <div className="flex items-center gap-3">
+                      <Gavel className="h-4 w-4 text-amber-600" />
+                      <div>
+                        <p className="font-medium">Atualização de normas</p>
+                        <p className="text-sm text-gray-500">
+                          {job.progress_percentage ?? 0}% ·{' '}
+                          {new Date(job.created_at).toLocaleString('pt-BR')}
+                        </p>
+                      </div>
+                    </div>
+                    <Badge
+                      className={
+                        job.status === 'completed'
+                          ? 'bg-green-500'
+                          : job.status === 'error'
+                            ? 'bg-red-500'
+                            : job.status === 'analyzing'
+                              ? 'bg-blue-500'
+                              : 'bg-gray-500'
+                      }
+                    >
+                      {job.status === 'completed'
+                        ? 'Concluído'
+                        : job.status === 'error'
+                          ? 'Erro'
+                          : job.status === 'analyzing'
+                            ? 'Em andamento'
+                            : 'Aguardando'}
+                    </Badge>
+                  </div>
+                </Link>
+              ))}
+
               {/* Pipeline Jobs */}
               {pipelineJobs.map((job) => (
                 <Link

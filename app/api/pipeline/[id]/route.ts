@@ -32,8 +32,8 @@ async function findCurrentOperationJobId(
         runningStatuses = ['pending', 'adapting'];
         break;
       case 'update':
-        tableName = 'norms_update_jobs';
-        runningStatuses = ['pending', 'updating'];
+        tableName = 'norm_update_jobs';
+        runningStatuses = ['pending', 'analyzing'];
         break;
       default:
         return undefined;
@@ -138,18 +138,24 @@ async function getOperationProgress(
 
       case 'update': {
         const { data: updateJob } = await supabase
-          .from('norms_update_jobs')
-          .select('progress_percentage, status, current_section, total_sections')
+          .from('norm_update_jobs')
+          .select(
+            'progress_percentage, status, current_reference, total_references'
+          )
           .eq('id', operationJobId)
           .single();
 
         if (!updateJob) return null;
 
         const percentage = updateJob.progress_percentage || 0;
+        const total = updateJob.total_references || 0;
+        const current = updateJob.current_reference || 0;
         const message =
-          updateJob.status === 'updating' && updateJob.total_sections > 0
-            ? `Atualizando seção ${updateJob.current_section + 1} de ${updateJob.total_sections}`
-            : undefined;
+          updateJob.status === 'analyzing' && total > 0
+            ? `Verificando referência ${current} de ${total}`
+            : updateJob.status === 'analyzing'
+              ? 'Analisando normas…'
+              : undefined;
 
         return { percentage, message };
       }

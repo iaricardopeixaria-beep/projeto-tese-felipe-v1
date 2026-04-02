@@ -40,6 +40,8 @@ export async function GET(
     }
 
     // Formata resposta
+    const activityLog = Array.isArray(job.activity_log) ? job.activity_log : [];
+
     return NextResponse.json({
       jobId: job.id,
       documentId: job.document_id,
@@ -51,6 +53,7 @@ export async function GET(
         totalReferences: job.total_references,
         percentage: job.progress_percentage
       },
+      activityLog,
       references: job.norm_references || [],
       stats: {
         total: job.total_references,

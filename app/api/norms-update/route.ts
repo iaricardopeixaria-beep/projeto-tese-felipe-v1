@@ -8,6 +8,7 @@ import { extractDocumentStructure } from '@/lib/improvement/document-analyzer';
 import { detectNormsInDocument } from '@/lib/norms-update/norm-detector';
 import { verifyMultipleNorms } from '@/lib/norms-update/norm-verifier';
 import { NormReference } from '@/lib/norms-update/types';
+import { appendNormJobLog } from '@/lib/norms-update/job-log';
 
 // POST /api/norms-update - Inicia análise de normas
 export async function POST(req: NextRequest) {
@@ -104,6 +105,7 @@ async function processNormsUpdate(
       })
       .eq('id', jobId);
 
+    await appendNormJobLog(jobId, 'Início da análise de normas');
     console.log(`[NORMS] Starting analysis for job ${jobId}`);
 
     let tempFilePath: string;
@@ -111,6 +113,7 @@ async function processNormsUpdate(
     if (sourceDocumentPath) {
       // Pipeline mode - use provided path
       console.log(`[NORMS] Using source document from pipeline: ${sourceDocumentPath}`);
+      await appendNormJobLog(jobId, 'Usando documento do pipeline');
       tempFilePath = sourceDocumentPath;
     } else {
       // Standalone mode - download from Storage
@@ -130,6 +133,7 @@ async function processNormsUpdate(
 
     // Extrai estrutura do documento
     console.log('[NORMS] Extracting document structure...');
+    await appendNormJobLog(jobId, 'Extraindo estrutura do documento…');
     const { structure, paragraphs } = await extractDocumentStructure(tempFilePath);
 
     // Prepara parágrafos com contexto
@@ -143,6 +147,10 @@ async function processNormsUpdate(
 
     // Detecta normas no documento
     console.log('[NORMS] Detecting norms...');
+    await appendNormJobLog(
+      jobId,
+      `Detectando normas em ${paragraphsWithContext.length} parágrafo(s)…`
+    );
     const apiKey =
       provider === 'openai'
         ? process.env.OPENAI_API_KEY!
@@ -158,6 +166,12 @@ async function processNormsUpdate(
     );
 
     console.log(`[NORMS] Found ${references.length} references`);
+    await appendNormJobLog(
+      jobId,
+      references.length === 0
+        ? 'Nenhuma referência normativa detectada.'
+        : `Detectadas ${references.length} referência(s) normativa(s).`
+    );
 
     // Atualiza job com referências encontradas
     await supabase
@@ -179,13 +193,19 @@ async function processNormsUpdate(
         })
         .eq('id', jobId);
 
+      await appendNormJobLog(jobId, 'Análise finalizada (sem normas a verificar).');
       await fs.unlink(tempFilePath).catch(() => {});
       return;
     }
 
     // Verifica status: primeiro LexML/Senado (fontes oficiais), depois IA se necessário
     console.log('[NORMS] Verifying norm statuses (official sources + Gemini/OpenAI)...');
+    await appendNormJobLog(
+      jobId,
+      'Verificando status (fontes oficiais LexML/Senado e IA, se necessário)…'
+    );
 
+    let lastLoggedProgressBracket = -1;
     const verifiedReferences = await verifyMultipleNorms(
       references,
       provider,
@@ -195,6 +215,14 @@ async function processNormsUpdate(
       async (current: number, total: number) => {
         // Callback de progresso
         const percentage = 10 + Math.floor((current / total) * 90);
+        const bracket = Math.floor(percentage / 15);
+        if (bracket > lastLoggedProgressBracket || current === total) {
+          lastLoggedProgressBracket = bracket;
+          await appendNormJobLog(
+            jobId,
+            `Verificação: ${current}/${total} referências (~${percentage}%)`
+          );
+        }
         await supabase
           .from('norm_update_jobs')
           .update({
@@ -227,11 +255,17 @@ async function processNormsUpdate(
     // Limpa arquivo temporário
     await fs.unlink(tempFilePath).catch(() => {});
 
+    await appendNormJobLog(jobId, 'Análise concluída. Revise os resultados e aplique as alterações desejadas.');
     console.log(`[NORMS] Analysis completed for job ${jobId}`);
 
   } catch (error: any) {
     console.error('[NORMS] Processing error:', error);
 
+    await appendNormJobLog(
+      jobId,
+      `Erro: ${error.message || String(error)}`,
+      'error'
+    );
     await supabase
       .from('norm_update_jobs')
       .update({
