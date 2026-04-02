@@ -38,7 +38,7 @@ export function getAIErrorMessage(messageOrError: string | unknown, fallback = '
   const msg = String(raw).trim();
 
   if (isRateLimitOrQuotaError(msg)) {
-    return 'Limite de uso da API (Gemini/OpenAI) excedido. A aplicação tentou acessar o modelo e não obteve resposta. Aguarde alguns minutos e tente novamente, ou verifique plano e faturamento do provedor.';
+    return 'Limite de uso da API (Gemini, OpenAI, Claude, etc.) excedido. A aplicação tentou acessar o modelo e não obteve resposta. Aguarde alguns minutos e tente novamente, ou verifique plano e faturamento do provedor.';
   }
 
   return msg || fallback;

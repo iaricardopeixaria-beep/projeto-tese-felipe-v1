@@ -109,13 +109,15 @@ async function getCurrentChapter(paragraphs: any[], paragraphIndex: number, stru
 async function processNormsUpdate(
   jobId: string,
   tempFilePath: string,
-  provider: 'openai' | 'gemini',
+  provider: 'openai' | 'gemini' | 'anthropic',
   model: string
 ) {
   const apiKey =
     provider === 'openai'
       ? process.env.OPENAI_API_KEY!
-      : (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)!;
+      : provider === 'anthropic'
+        ? process.env.ANTHROPIC_API_KEY!
+        : (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)!;
 
   try {
     await supabase

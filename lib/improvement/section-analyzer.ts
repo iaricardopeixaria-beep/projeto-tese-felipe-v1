@@ -10,7 +10,7 @@ export async function analyzeSectionForImprovements(
   globalContext: GlobalContext,
   chapterTitle: string,
   paragraphStartIndex: number,
-  provider: 'openai' | 'gemini',
+  provider: 'openai' | 'gemini' | 'anthropic',
   model: string,
   apiKey: string
 ): Promise<ImprovementSuggestion[]> {
@@ -91,6 +91,18 @@ Retorne APENAS o JSON, sem texto adicional.`;
       });
 
       response = completion.choices[0]?.message?.content?.trim() || '{"suggestions":[]}';
+    } else if (provider === 'anthropic') {
+      const { anthropicChat } = await import('@/lib/ai/anthropic');
+      const { text } = await anthropicChat({
+        apiKey,
+        model,
+        system:
+          'Responda apenas com um objeto JSON válido conforme o formato pedido. Sem markdown.',
+        user: prompt,
+        maxTokens: 12000,
+        temperature: 0.3
+      });
+      response = text || '{"suggestions":[]}';
     } else {
       // Gemini with 429 retry
       const { GoogleGenerativeAI } = await import('@google/generative-ai');

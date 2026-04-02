@@ -252,11 +252,14 @@ export class PipelineEngine {
       .eq('id', adjustJobId);
 
     // Get API key
-    const apiKey = adjustConfig.provider === 'openai'
-      ? process.env.OPENAI_API_KEY!
-      : adjustConfig.provider === 'gemini'
-      ? (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)!
-      : process.env.GROK_API_KEY!;
+    const apiKey =
+      adjustConfig.provider === 'openai'
+        ? process.env.OPENAI_API_KEY!
+        : adjustConfig.provider === 'gemini'
+          ? (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)!
+          : adjustConfig.provider === 'anthropic'
+            ? process.env.ANTHROPIC_API_KEY!
+            : process.env.GROK_API_KEY!;
 
     try {
       // Generate adjustment suggestions directly
@@ -378,9 +381,12 @@ export class PipelineEngine {
       }));
 
     // Get API key
-    const apiKey = updateConfig.provider === 'openai'
-      ? process.env.OPENAI_API_KEY!
-      : (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)!;
+    const apiKey =
+      updateConfig.provider === 'openai'
+        ? process.env.OPENAI_API_KEY!
+        : updateConfig.provider === 'anthropic'
+          ? process.env.ANTHROPIC_API_KEY!
+          : (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)!;
 
     try {
       // Detect norms in document
@@ -530,9 +536,12 @@ export class PipelineEngine {
     const { structure, paragraphs } = await extractDocumentStructure(sourceDocumentPath);
 
     // Get API key
-    const apiKey = improveConfig.provider === 'openai'
-      ? process.env.OPENAI_API_KEY!
-      : (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)!;
+    const apiKey =
+      improveConfig.provider === 'openai'
+        ? process.env.OPENAI_API_KEY!
+        : improveConfig.provider === 'anthropic'
+          ? process.env.ANTHROPIC_API_KEY!
+          : (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)!;
 
     // Generate global context
     const globalContext = await generateGlobalContext(
@@ -715,11 +724,14 @@ export class PipelineEngine {
       .eq('id', adaptJobId);
 
     // Get API key
-    const apiKey = adaptConfig.provider === 'openai'
-      ? process.env.OPENAI_API_KEY!
-      : adaptConfig.provider === 'gemini'
-      ? (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)!
-      : process.env.GROK_API_KEY!;
+    const apiKey =
+      adaptConfig.provider === 'openai'
+        ? process.env.OPENAI_API_KEY!
+        : adaptConfig.provider === 'gemini'
+          ? (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)!
+          : adaptConfig.provider === 'anthropic'
+            ? process.env.ANTHROPIC_API_KEY!
+            : process.env.GROK_API_KEY!;
 
     console.log(`[PIPELINE ADAPT ${adaptJobId}] Starting adaptation analysis with provider: ${adaptConfig.provider}, model: ${adaptConfig.model}`);
 

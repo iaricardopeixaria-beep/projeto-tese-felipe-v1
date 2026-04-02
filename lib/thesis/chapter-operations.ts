@@ -177,14 +177,20 @@ export async function executeImproveOperation(
 
     // Gera contexto global
     console.log(`[CHAPTER-IMPROVE] Generating global context...`);
-    const apiKey = provider === 'openai'
-      ? process.env.OPENAI_API_KEY!
-      : (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)!;
+    const apiKey =
+      provider === 'openai'
+        ? process.env.OPENAI_API_KEY!
+        : provider === 'anthropic'
+          ? process.env.ANTHROPIC_API_KEY!
+          : (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)!;
+
+    const contextProvider: 'openai' | 'gemini' | 'anthropic' =
+      provider === 'anthropic' ? 'anthropic' : provider === 'openai' ? 'openai' : 'gemini';
 
     const globalContext = await generateGlobalContext(
       paragraphs,
       structure,
-      provider,
+      contextProvider,
       model,
       apiKey,
       combinedContext // Pass combined context (references + chapters)
@@ -210,7 +216,7 @@ export async function executeImproveOperation(
         globalContext,
         section.title,
         section.startParagraphIndex,
-        provider,
+        contextProvider,
         model,
         apiKey
       );
@@ -355,7 +361,7 @@ export async function executeTranslateOperation(
           section.title,
           targetLanguage,
           sourceLanguage,
-          provider as 'openai' | 'gemini' | 'grok',
+          provider as 'openai' | 'gemini' | 'grok' | 'anthropic',
           model,
           apiKey
         );
@@ -561,17 +567,20 @@ export async function executeAdjustOperation(
 
     // Executa análise de ajustes
     console.log(`[CHAPTER-ADJUST] Analyzing document with instructions...`);
-    const apiKey = provider === 'openai'
-      ? process.env.OPENAI_API_KEY!
-      : provider === 'gemini'
-      ? (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)!
-      : process.env.GROK_API_KEY!;
+    const apiKey =
+      provider === 'openai'
+        ? process.env.OPENAI_API_KEY!
+        : provider === 'gemini'
+          ? (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)!
+          : provider === 'anthropic'
+            ? process.env.ANTHROPIC_API_KEY!
+            : process.env.GROK_API_KEY!;
 
     const suggestions = await analyzeDocumentForAdjustments(
       sourcePath,
       enhancedInstructions,
       creativity,
-      provider as 'openai' | 'gemini' | 'grok',
+      provider as 'openai' | 'gemini' | 'grok' | 'anthropic',
       model,
       apiKey,
       useGrounding
@@ -718,7 +727,7 @@ export async function executeAdaptOperation(
       sourcePath,
       style,
       targetAudience,
-      provider as 'openai' | 'gemini' | 'grok',
+      provider as 'openai' | 'gemini' | 'grok' | 'anthropic',
       model,
       apiKey
     );
@@ -878,14 +887,22 @@ export async function executeUpdateOperation(
 
     // Gera contexto global com referências
     console.log(`[CHAPTER-UPDATE] Generating global context with references...`);
-    const apiKey = provider === 'openai'
-      ? process.env.OPENAI_API_KEY!
-      : (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)!;
+    const apiKey =
+      provider === 'openai'
+        ? process.env.OPENAI_API_KEY!
+        : provider === 'anthropic'
+          ? process.env.ANTHROPIC_API_KEY!
+          : provider === 'grok'
+            ? process.env.GROK_API_KEY!
+            : (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)!;
+
+    const updateContextProvider: 'openai' | 'gemini' | 'anthropic' =
+      provider === 'anthropic' ? 'anthropic' : provider === 'openai' ? 'openai' : 'gemini';
 
     const globalContext = await generateGlobalContext(
       paragraphs,
       structure,
-      provider,
+      updateContextProvider,
       model,
       apiKey,
       combinedContext
@@ -1004,7 +1021,7 @@ async function analyzeSectionForUpdates(
   sectionTitle: string,
   paragraphStartIndex: number,
   referencesContext: string,
-  provider: 'openai' | 'gemini' | 'grok',
+  provider: 'openai' | 'gemini' | 'grok' | 'anthropic',
   model: string,
   apiKey: string
 ): Promise<any[]> {
@@ -1093,6 +1110,18 @@ Retorne APENAS o JSON, sem texto adicional.`;
       });
 
       response = completion.choices[0]?.message?.content?.trim() || '{"suggestions":[]}';
+    } else if (provider === 'anthropic') {
+      const { anthropicChat } = await import('@/lib/ai/anthropic');
+      const { text } = await anthropicChat({
+        apiKey,
+        model,
+        system:
+          'Responda apenas com um objeto JSON válido conforme o formato pedido. Sem markdown.',
+        user: prompt,
+        maxTokens: 12000,
+        temperature: 0.3
+      });
+      response = text || '{"suggestions":[]}';
     } else {
       // Gemini with 429 retry
       const { GoogleGenerativeAI } = await import('@google/generative-ai');
@@ -1162,7 +1191,7 @@ async function generateTranslationSuggestions(
   sectionTitle: string,
   targetLanguage: string,
   sourceLanguage: string | undefined,
-  provider: 'openai' | 'gemini' | 'grok',
+  provider: 'openai' | 'gemini' | 'grok' | 'anthropic',
   model: string,
   apiKey: string
 ): Promise<any[]> {
@@ -1205,6 +1234,18 @@ Respond with ONLY a JSON object in this format:
 
     responseText = response.choices[0].message.content || '{}';
 
+  } else if (provider === 'anthropic') {
+    const { anthropicChat } = await import('@/lib/ai/anthropic');
+    const { text } = await anthropicChat({
+      apiKey,
+      model,
+      system:
+        'Responda apenas com um objeto JSON válido conforme o formato pedido. Sem markdown.',
+      user: prompt,
+      maxTokens: 12000,
+      temperature: 0.3
+    });
+    responseText = text || '{}';
   } else {
     // Gemini with 429 retry
     const { GoogleGenerativeAI } = await import('@google/generative-ai');
@@ -1267,6 +1308,8 @@ function getAPIKey(provider: AIProvider): string {
       return process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY!;
     case 'grok':
       return process.env.GROK_API_KEY!;
+    case 'anthropic':
+      return process.env.ANTHROPIC_API_KEY!;
     default:
       throw new Error(`Unsupported provider: ${provider}`);
   }

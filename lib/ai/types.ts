@@ -1,6 +1,6 @@
 import { Chunk } from '../state';
 
-export type AIProvider = 'openai' | 'gemini' | 'grok';
+export type AIProvider = 'openai' | 'gemini' | 'grok' | 'anthropic';
 
 export type Citation = {
   page: number;

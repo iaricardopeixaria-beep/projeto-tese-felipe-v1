@@ -174,7 +174,7 @@ export async function extractDocumentStructure(filePath: string): Promise<{
 export async function generateGlobalContext(
   paragraphs: Array<{ text: string; isHeader: boolean; headerLevel?: number }>,
   structure: DocumentStructure,
-  provider: 'openai' | 'gemini',
+  provider: 'openai' | 'gemini' | 'anthropic',
   model: string,
   apiKey: string,
   referencesContext: string = ''
@@ -254,6 +254,18 @@ Retorne APENAS um JSON válido no formato:
     });
 
     response = completion.choices[0]?.message?.content?.trim() || '{}';
+  } else if (provider === 'anthropic') {
+    const { anthropicChat } = await import('@/lib/ai/anthropic');
+    const { text } = await anthropicChat({
+      apiKey,
+      model,
+      system:
+        'Responda apenas com um objeto JSON válido conforme o formato pedido. Sem markdown.',
+      user: prompt,
+      maxTokens: 8000,
+      temperature: 0.3
+    });
+    response = text || '{}';
   } else {
     // Gemini with 429 retry
     const { GoogleGenerativeAI } = await import('@google/generative-ai');

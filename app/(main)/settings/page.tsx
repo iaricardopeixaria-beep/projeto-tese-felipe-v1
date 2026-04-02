@@ -22,7 +22,8 @@ export default function SettingsPage() {
     openai: string[];
     gemini: string[];
     grok: string[];
-  }>({ openai: [], gemini: [], grok: [] });
+    anthropic: string[];
+  }>({ openai: [], gemini: [], grok: [], anthropic: [] });
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -35,8 +36,9 @@ export default function SettingsPage() {
       if (settings?.openaiKey) loadAllModels('openai');
       if (settings?.googleKey) loadAllModels('gemini');
       if (settings?.xaiKey) loadAllModels('grok');
+      if (settings?.anthropicKey) loadAllModels('anthropic');
     }
-  }, [mounted, settings?.openaiKey, settings?.googleKey, settings?.xaiKey]);
+  }, [mounted, settings?.openaiKey, settings?.googleKey, settings?.xaiKey, settings?.anthropicKey]);
 
   const loadSettings = async () => {
     try {
@@ -69,7 +71,7 @@ export default function SettingsPage() {
     }
   };
 
-  const loadAllModels = async (provider: 'openai' | 'gemini' | 'grok') => {
+  const loadAllModels = async (provider: 'openai' | 'gemini' | 'grok' | 'anthropic') => {
     setLoadingModels((prev) => ({ ...prev, [provider]: true }));
 
     try {
@@ -93,7 +95,7 @@ export default function SettingsPage() {
     }
   };
 
-  const toggleModel = (provider: 'openai' | 'gemini' | 'grok', model: string) => {
+  const toggleModel = (provider: 'openai' | 'gemini' | 'grok' | 'anthropic', model: string) => {
     const currentModels = settings?.models[provider] || [];
     const isSelected = currentModels.includes(model);
 
@@ -107,7 +109,7 @@ export default function SettingsPage() {
     }));
   };
 
-  const handleTest = async (provider: 'openai' | 'gemini' | 'grok') => {
+  const handleTest = async (provider: 'openai' | 'gemini' | 'grok' | 'anthropic') => {
     setTesting((prev) => ({ ...prev, [provider]: true }));
     setTestResults((prev) => ({ ...prev, [provider]: null }));
 
@@ -122,10 +124,14 @@ export default function SettingsPage() {
 
       const data = await res.json();
       setTestResults((prev) => ({ ...prev, [provider]: 'success' }));
-      toast.success(`${provider.toUpperCase()} conectado! Latência: ${data.latencyMs}ms`);
+      toast.success(
+        `${provider === 'anthropic' ? 'Claude' : provider.toUpperCase()} conectado! Latência: ${data.latencyMs}ms`
+      );
     } catch (error: any) {
       setTestResults((prev) => ({ ...prev, [provider]: 'error' }));
-      toast.error(`${provider.toUpperCase()}: ${getAIErrorMessage(error, 'Não foi possível conectar')}`);
+      toast.error(
+        `${provider === 'anthropic' ? 'Claude' : provider.toUpperCase()}: ${getAIErrorMessage(error, 'Não foi possível conectar')}`
+      );
     } finally {
       setTesting((prev) => ({ ...prev, [provider]: false }));
     }
@@ -299,6 +305,50 @@ export default function SettingsPage() {
               Modelos: {settings?.models.grok?.join(', ')}
             </p>
           </div>
+
+          {/* Anthropic (Claude) */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="anthropic-key">Anthropic API Key (Claude)</Label>
+              {testResults.anthropic === 'success' && (
+                <Badge variant="secondary" className="bg-green-950/50 text-green-400 border-green-900">
+                  <CheckCircle className="h-3 w-3 mr-1" />
+                  Conectado
+                </Badge>
+              )}
+              {testResults.anthropic === 'error' && (
+                <Badge variant="secondary" className="bg-red-950/50 text-red-400 border-red-900">
+                  <XCircle className="h-3 w-3 mr-1" />
+                  Erro
+                </Badge>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Input
+                id="anthropic-key"
+                type="password"
+                placeholder="sk-ant-..."
+                value={settings?.anthropicKey || ''}
+                onChange={(e) =>
+                  setSettings((prev: any) => ({ ...prev, anthropicKey: e.target.value }))
+                }
+              />
+              <Button
+                variant="outline"
+                onClick={() => handleTest('anthropic')}
+                disabled={testing.anthropic || !settings?.anthropicKey}
+              >
+                {testing.anthropic ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  'Testar'
+                )}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Modelos: {settings?.models?.anthropic?.join(', ')}
+            </p>
+          </div>
         </CardContent>
       </Card>
 
@@ -421,6 +471,44 @@ export default function SettingsPage() {
             )}
             <p className="text-xs text-muted-foreground">
               Selecionados: {settings?.models?.grok?.length || 0}
+            </p>
+          </div>
+
+          {/* Claude */}
+          <div className="space-y-3 border-t pt-6">
+            <Label className="text-base font-semibold">Modelos Claude (Anthropic)</Label>
+            {loadingModels.anthropic ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Carregando modelos...
+              </div>
+            ) : availableModels.anthropic.length > 0 ? (
+              <div className="grid grid-cols-2 gap-3">
+                {availableModels.anthropic.map((model) => (
+                  <div key={model} className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id={`anthropic-${model}`}
+                      checked={settings?.models?.anthropic?.includes(model) || false}
+                      onChange={() => toggleModel('anthropic', model)}
+                      className="rounded"
+                    />
+                    <label
+                      htmlFor={`anthropic-${model}`}
+                      className="text-sm cursor-pointer hover:text-primary"
+                    >
+                      {model}
+                    </label>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Configure a chave Anthropic para carregar modelos
+              </p>
+            )}
+            <p className="text-xs text-muted-foreground">
+              Selecionados: {settings?.models?.anthropic?.length || 0}
             </p>
           </div>
         </CardContent>

@@ -75,11 +75,25 @@ ${protectedText}
 
 TRANSLATION (must have similar length and same number of sentences, with MANDATORY SPACES between ALL words${hasProtectedElements ? ', and KEEP all __NUM_X__ and __DATE_X__ placeholders' : ''}):`;
 
-  console.log(`[TRANSLATE] Text: ${text.length} chars → Using OpenAI (${model})`);
+  console.log(`[TRANSLATE] Text: ${text.length} chars → Using ${provider} (${model})`);
   console.log(`[TRANSLATE] 📤 SENDING TO AI:\n---\n${protectedText}\n---`);
 
-  // Traduz usando OpenAI com retry automático
-  const result = await translateWithOpenAI(prompt, model, 16384);
+  let result: string;
+  switch (provider) {
+    case 'gemini':
+      result = await translateWithGemini(prompt, model, 16384);
+      break;
+    case 'grok':
+      result = await translateWithGrok(prompt, model, 16384);
+      break;
+    case 'anthropic':
+      result = await translateWithAnthropic(prompt, model, 16384);
+      break;
+    case 'openai':
+    default:
+      result = await translateWithOpenAI(prompt, model, 16384);
+      break;
+  }
 
   console.log(`[TRANSLATE] 📥 RECEIVED FROM AI:\n---\n${result}\n---`);
 
@@ -259,6 +273,39 @@ async function translateWithOpenAI(prompt: string, model: string, maxTokens: num
   }
 
   throw lastError ?? new Error('OpenAI failed after all retries');
+}
+
+async function translateWithAnthropic(prompt: string, model: string, maxTokens: number): Promise<string> {
+  const apiKey = state.settings.anthropicKey;
+  if (!apiKey) throw new Error('Anthropic API key not configured');
+
+  const { anthropicChat } = await import('../ai/anthropic');
+  const maxRetries = 6;
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const { text } = await anthropicChat({
+        apiKey,
+        model,
+        user: prompt,
+        maxTokens,
+        temperature: 0.3
+      });
+      const result = text.trim();
+      if (!result) throw new Error('Anthropic returned empty response');
+      return result;
+    } catch (error: unknown) {
+      lastError = error;
+      if (isTimeoutOrRateLimit(error) && attempt < maxRetries - 1) {
+        await sleep(15000);
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  throw lastError ?? new Error('Anthropic translation failed');
 }
 
 /**

@@ -73,6 +73,14 @@ async function listGeminiModels(apiKey: string): Promise<string[]> {
   }
 }
 
+function listAnthropicModelsStatic(): string[] {
+  return [
+    'claude-sonnet-4-20250514',
+    'claude-3-5-sonnet-20241022',
+    'claude-3-5-haiku-20241022'
+  ];
+}
+
 async function listGrokModels(apiKey: string): Promise<string[]> {
   try {
     const response = await fetch('https://api.x.ai/v1/models', {
@@ -108,7 +116,7 @@ async function listGrokModels(apiKey: string): Promise<string[]> {
 
 export async function POST(request: NextRequest) {
   try {
-    const { provider } = await request.json() as { provider: 'openai' | 'gemini' | 'grok' };
+    const { provider } = await request.json() as { provider: 'openai' | 'gemini' | 'grok' | 'anthropic' };
 
     if (!provider) {
       return NextResponse.json(
@@ -137,6 +145,12 @@ export async function POST(request: NextRequest) {
         apiKey = state.settings.xaiKey;
         if (!apiKey) throw new Error('Grok API key not configured');
         models = await listGrokModels(apiKey);
+        break;
+
+      case 'anthropic':
+        apiKey = state.settings.anthropicKey;
+        if (!apiKey) throw new Error('Anthropic API key not configured');
+        models = listAnthropicModelsStatic();
         break;
 
       default:

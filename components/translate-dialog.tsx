@@ -44,13 +44,15 @@ const LANGUAGES = {
 const PROVIDERS = {
   openai: 'OpenAI',
   gemini: 'Google Gemini',
-  grok: 'xAI Grok'
+  grok: 'xAI Grok',
+  anthropic: 'Claude (Anthropic)'
 };
 
 const MODELS_BY_PROVIDER: Record<string, string[]> = {
   openai: ['gpt-4o', 'gpt-4o-mini'],
   gemini: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash'],
-  grok: ['grok-2-1212', 'grok-2-vision-1212']
+  grok: ['grok-2-1212', 'grok-2-vision-1212'],
+  anthropic: ['claude-sonnet-4-20250514', 'claude-3-5-sonnet-20241022']
 };
 
 export function TranslateDialog({ documentId, documentTitle }: TranslationDialogProps) {

@@ -2,6 +2,7 @@ import { AIProvider, AIResponse, ChatRequest } from './types';
 import { executeOpenAI } from './openai';
 import { executeGemini } from './gemini';
 import { executeGrok } from './grok';
+import { executeAnthropic } from './anthropic';
 import { state } from '../state';
 
 export async function executeAI(
@@ -25,6 +26,11 @@ export async function executeAI(
       apiKey = state.settings.xaiKey;
       if (!apiKey) throw new Error('Grok API key not configured');
       return executeGrok(request, apiKey);
+
+    case 'anthropic':
+      apiKey = state.settings.anthropicKey;
+      if (!apiKey) throw new Error('Anthropic API key not configured');
+      return executeAnthropic(request, apiKey);
 
     default:
       throw new Error(`Unsupported provider: ${provider}`);

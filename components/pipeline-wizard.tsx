@@ -433,7 +433,7 @@ function AdjustConfig({ config, onChange }: any) {
         />
         <p className="text-xs text-gray-500 mt-1">Nível: {config?.creativity || 5}</p>
       </div>
-      <ModelSelector config={config} onChange={onChange} providers={['openai', 'gemini', 'grok']} />
+      <ModelSelector config={config} onChange={onChange} providers={['openai', 'gemini', 'grok', 'anthropic']} />
     </>
   );
 }
@@ -460,7 +460,10 @@ function UpdateConfig({ config, onChange }: any) {
           </span>
         </label>
       </div>
-      <ModelSelector config={config} onChange={onChange} providers={['gemini']} />
+      <p className="text-xs text-amber-800 dark:text-amber-200">
+        Com Claude, a verificação usa pesquisa na web (custo adicional por busca na Anthropic). É preciso habilitar web search no console Anthropic.
+      </p>
+      <ModelSelector config={config} onChange={onChange} providers={['gemini', 'anthropic', 'openai']} />
     </>
   );
 }
@@ -471,7 +474,7 @@ function ImproveConfig({ config, onChange }: any) {
       <div className="p-3 border rounded bg-yellow-50 text-sm text-yellow-800">
         ⚠️ Esta operação requer aprovação manual após a análise
       </div>
-      <ModelSelector config={config} onChange={onChange} providers={['openai', 'gemini']} />
+      <ModelSelector config={config} onChange={onChange} providers={['openai', 'gemini', 'anthropic']} />
     </>
   );
 }
@@ -505,7 +508,7 @@ function AdaptConfig({ config, onChange }: any) {
           />
         </div>
       )}
-      <ModelSelector config={config} onChange={onChange} providers={['openai', 'gemini']} />
+      <ModelSelector config={config} onChange={onChange} providers={['openai', 'gemini', 'anthropic']} />
     </>
   );
 }
@@ -551,7 +554,7 @@ function TranslateConfig({ config, onChange }: any) {
           </Select>
         </div>
       </div>
-      <ModelSelector config={config} onChange={onChange} providers={['openai']} />
+      <ModelSelector config={config} onChange={onChange} providers={['openai', 'gemini', 'grok', 'anthropic']} />
     </>
   );
 }
@@ -574,7 +577,9 @@ function ModelSelector({ config, onChange, providers }: { config: any; onChange:
           </SelectTrigger>
           <SelectContent>
             {providers.map((p) => (
-              <SelectItem key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</SelectItem>
+              <SelectItem key={p} value={p}>
+                {p === 'anthropic' ? 'Claude' : p.charAt(0).toUpperCase() + p.slice(1)}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -606,28 +611,32 @@ function ModelSelector({ config, onChange, providers }: { config: any; onChange:
 const MODELS: Record<string, string[]> = {
   openai: ['gpt-4o', 'gpt-4o-mini'],
   gemini: ['gemini-2.5-flash', 'gemini-2.5-pro'],
-  grok: ['grok-2-1212']
+  grok: ['grok-2-1212'],
+  anthropic: ['claude-sonnet-4-20250514', 'claude-3-5-sonnet-20241022']
 };
 
 function getDefaultProviders(op: PipelineOperation): string[] {
   switch (op) {
     case 'adjust':
-      return ['gemini', 'openai', 'grok'];
+      return ['gemini', 'openai', 'grok', 'anthropic'];
     case 'update':
-      return ['gemini'];
+      return ['gemini', 'anthropic', 'openai'];
     case 'improve':
-      return ['gemini', 'openai'];
+      return ['gemini', 'openai', 'anthropic'];
     case 'adapt':
-      return ['gemini', 'openai'];
+      return ['gemini', 'openai', 'anthropic'];
     case 'translate':
-      return ['gemini', 'openai'];
+      return ['gemini', 'openai', 'anthropic'];
     default:
-      return ['gemini', 'openai'];
+      return ['gemini', 'openai', 'anthropic'];
   }
 }
 
 function getDefaultModel(provider: string): string {
-  return MODELS[provider]?.[0] || (provider === 'gemini' ? 'gemini-2.5-flash' : 'gpt-4o');
+  return (
+    MODELS[provider]?.[0] ||
+    (provider === 'gemini' ? 'gemini-2.5-flash' : provider === 'anthropic' ? 'claude-sonnet-4-20250514' : 'gpt-4o')
+  );
 }
 
 function validateConfig(op: PipelineOperation, config: any): boolean {

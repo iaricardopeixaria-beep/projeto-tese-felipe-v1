@@ -57,7 +57,7 @@ export type ImprovementJob = {
 };
 
 export type ImprovementOptions = {
-  provider: 'openai' | 'gemini'; // AI provider
+  provider: 'openai' | 'gemini' | 'anthropic'; // AI provider
   model: string; // Model to use
   focusAreas?: ImprovementType[]; // Specific areas to focus on (default: all)
   maxSuggestions?: number; // Max suggestions per section (default: unlimited)

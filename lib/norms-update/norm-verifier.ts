@@ -3,12 +3,12 @@ import { isGemini429, parseGeminiRetryDelayMs, sleep } from '@/lib/ai/gemini-ret
 import { verifyWithOfficialSources } from './sources/official-sources';
 
 /**
- * Verifica o status de uma norma: primeiro fontes oficiais (LexML/Senado), depois IA (Gemini/OpenAI).
+ * Verifica o status de uma norma: primeiro fontes oficiais (LexML/Senado), depois IA (Gemini/OpenAI/Claude).
  * Esta função roda no SERVIDOR (API route)
  */
 export async function verifyNormStatus(
   reference: NormReference,
-  provider: 'openai' | 'gemini',
+  provider: 'openai' | 'gemini' | 'anthropic',
   model: string,
   apiKey: string,
   webSearchFn?: (query: string) => Promise<string> // Opcional - só para OpenAI
@@ -34,7 +34,7 @@ export async function verifyNormStatus(
       };
     }
 
-    // 2) Fallback: IA (Gemini com Google Search ou OpenAI com webSearchFn)
+    // 2) Fallback: IA (Gemini com Google Search, Claude com web search, ou OpenAI com webSearchFn)
     let searchResults = '';
 
     if (provider === 'openai' && webSearchFn) {
@@ -43,6 +43,8 @@ export async function verifyNormStatus(
       searchResults = await webSearchFn(searchQuery);
     } else if (provider === 'gemini') {
       console.log(`[NORMS] Using Gemini with Google Search grounding`);
+    } else if (provider === 'anthropic') {
+      console.log(`[NORMS] Using Claude with Anthropic web search tool`);
     }
 
     const analysis = await analyzeSearchResults(
@@ -112,22 +114,31 @@ function buildSearchQuery(reference: NormReference): string {
 async function analyzeSearchResults(
   reference: NormReference,
   searchResults: string,
-  provider: 'openai' | 'gemini',
+  provider: 'openai' | 'gemini' | 'anthropic',
   model: string,
   apiKey: string
 ): Promise<Partial<NormReference>> {
 
   const isPaid = reference.type === 'abnt' || reference.type === 'iso';
 
-  // Para Gemini, usa grounding (Google Search) ao invés de web search manual
-  const prompt = `Você é um especialista em análise de normas jurídicas e técnicas. ${provider === 'gemini' ? 'Use Google Search para verificar' : 'Analise os resultados de busca abaixo e determine'} o status da seguinte norma:
+  const webGrounded =
+    provider === 'gemini' || provider === 'anthropic';
+  const webHint =
+    provider === 'gemini'
+      ? 'Use Google Search para verificar'
+      : provider === 'anthropic'
+        ? 'Use a pesquisa na web (ferramenta disponível) para verificar'
+        : 'Analise os resultados de busca abaixo e determine';
+
+  // Para Gemini/Claude, pesquisa na web; para OpenAI, trechos de busca passados em searchResults
+  const prompt = `Você é um especialista em análise de normas jurídicas e técnicas. ${webHint} o status da seguinte norma:
 
 NORMA ANALISADA:
 Tipo: ${reference.type}
 Número: ${reference.number}
 Texto: ${reference.fullText}
 
-${provider === 'gemini' ? 'INSTRUÇÕES: Faça uma pesquisa na web para verificar o status atual desta norma. Procure em sites oficiais como planalto.gov.br, eur-lex.europa.eu, boe.es, abnt.org.br, iso.org, etc.' : `RESULTADOS DA BUSCA:\n---\n${searchResults.substring(0, 4000)}\n---`}
+${webGrounded ? 'INSTRUÇÕES: Faça uma pesquisa na web para verificar o status atual desta norma. Procure em sites oficiais como planalto.gov.br, eur-lex.europa.eu, boe.es, abnt.org.br, iso.org, etc.' : `RESULTADOS DA BUSCA:\n---\n${searchResults.substring(0, 4000)}\n---`}
 
 Determine:
 1. STATUS atual da norma:
@@ -189,6 +200,19 @@ JSON:
     });
 
     response = completion.choices[0]?.message?.content?.trim() || '{}';
+  } else if (provider === 'anthropic') {
+    const { anthropicChatWithWebSearch } = await import('@/lib/ai/anthropic');
+    const system =
+      'Você segue instruções com precisão. Ao final, responda APENAS com um objeto JSON válido conforme o formato pedido no enunciado, sem markdown.';
+    const { text } = await anthropicChatWithWebSearch({
+      apiKey,
+      model,
+      system,
+      user: prompt,
+      maxTokens: 8000,
+      maxWebUses: 10
+    });
+    response = text || '{}';
   } else {
     // Gemini com Google Search (grounding), com retry em 429
     const groundingModel = model === 'gemini-flash-latest' ? 'gemini-2.5-flash' : model;
@@ -302,7 +326,7 @@ JSON:
  */
 export async function verifyMultipleNorms(
   references: NormReference[],
-  provider: 'openai' | 'gemini',
+  provider: 'openai' | 'gemini' | 'anthropic',
   model: string,
   apiKey: string,
   webSearchFn?: (query: string) => Promise<string>,

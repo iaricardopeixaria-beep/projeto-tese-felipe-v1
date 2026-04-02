@@ -118,7 +118,7 @@ async function executeImprovement(
   jobId: string,
   documentId: string,
   doc: any,
-  provider: 'openai' | 'gemini',
+  provider: 'openai' | 'gemini' | 'anthropic',
   model: string,
   sourceDocumentPath?: string
 ) {
@@ -159,14 +159,20 @@ async function executeImprovement(
 
     // Gera contexto global
     console.log(`[IMPROVE] Generating global context...`);
-    const apiKey = provider === 'openai'
-      ? process.env.OPENAI_API_KEY!
-      : (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)!;
+    const apiKey =
+      provider === 'openai'
+        ? process.env.OPENAI_API_KEY!
+        : provider === 'anthropic'
+          ? process.env.ANTHROPIC_API_KEY!
+          : (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)!;
+
+    const contextProvider: 'openai' | 'gemini' | 'anthropic' =
+      provider === 'anthropic' ? 'anthropic' : provider === 'openai' ? 'openai' : 'gemini';
 
     const globalContext = await generateGlobalContext(
       paragraphs,
       structure,
-      provider,
+      contextProvider,
       model,
       apiKey
     );
@@ -211,7 +217,7 @@ async function executeImprovement(
             globalContext,
             section.title,
             section.startParagraphIndex + batchStart,
-            provider,
+            contextProvider,
             model,
             apiKey
           );
@@ -225,7 +231,7 @@ async function executeImprovement(
           globalContext,
           section.title,
           section.startParagraphIndex,
-          provider,
+          contextProvider,
           model,
           apiKey
         );

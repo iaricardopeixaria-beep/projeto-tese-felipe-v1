@@ -55,11 +55,12 @@ export default function DocumentPage() {
   const [pipelineSelectorOpen, setPipelineSelectorOpen] = useState(false);
 
   const [settings, setSettings] = useState<any>(null);
-  const [selectedProvider, setSelectedProvider] = useState<'openai' | 'gemini' | 'grok'>('openai');
+  const [selectedProvider, setSelectedProvider] = useState<'openai' | 'gemini' | 'grok' | 'anthropic'>('openai');
   const [selectedModels, setSelectedModels] = useState({
     openai: '',
     gemini: '',
-    grok: ''
+    grok: '',
+    anthropic: ''
   });
   const [pipelineJobs, setPipelineJobs] = useState<any[]>([]);
 
@@ -94,7 +95,8 @@ export default function DocumentPage() {
       setSelectedModels({
         openai: models.openai?.[0] || '',
         gemini: models.gemini?.[0] || '',
-        grok: models.grok?.[0] || ''
+        grok: models.grok?.[0] || '',
+        anthropic: models.anthropic?.[0] || ''
       });
     } catch (error: any) {
       console.error('Settings load error:', error);
@@ -381,6 +383,7 @@ export default function DocumentPage() {
                   <SelectItem value="openai">OpenAI</SelectItem>
                   <SelectItem value="gemini">Gemini</SelectItem>
                   <SelectItem value="grok">Grok</SelectItem>
+                  <SelectItem value="anthropic">Claude</SelectItem>
                 </SelectContent>
               </Select>
             </div>

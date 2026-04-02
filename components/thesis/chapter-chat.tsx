@@ -13,7 +13,7 @@ import { ChapterSelector } from './chapter-selector';
 import { CitationBadge, CitationDisplayMode } from './citation-badge';
 import { getAIErrorMessage } from '@/lib/ai-error-message';
 
-type AIProvider = 'openai' | 'gemini' | 'grok';
+type AIProvider = 'openai' | 'gemini' | 'grok' | 'anthropic';
 
 type ChapterVersion = {
   id: string;
@@ -73,7 +73,8 @@ export function ChapterChat({ currentChapterId, allChapters }: ChapterChatProps)
   const [selectedModels, setSelectedModels] = useState<Record<AIProvider, string>>({
     openai: '',
     gemini: '',
-    grok: ''
+    grok: '',
+    anthropic: ''
   });
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
@@ -90,7 +91,8 @@ export function ChapterChat({ currentChapterId, allChapters }: ChapterChatProps)
         const nextModels = {
           openai: models.openai?.[0] || '',
           gemini: models.gemini?.[0] || '',
-          grok: models.grok?.[0] || ''
+          grok: models.grok?.[0] || '',
+          anthropic: models.anthropic?.[0] || ''
         };
         setSelectedModels(nextModels);
         // Prefer Gemini when available (user may have Google credits)
@@ -98,6 +100,8 @@ export function ChapterChat({ currentChapterId, allChapters }: ChapterChatProps)
           setSelectedProvider('gemini');
         } else if (nextModels.openai) {
           setSelectedProvider('openai');
+        } else if (nextModels.anthropic) {
+          setSelectedProvider('anthropic');
         } else if (nextModels.grok) {
           setSelectedProvider('grok');
         }
@@ -165,7 +169,9 @@ export function ChapterChat({ currentChapterId, allChapters }: ChapterChatProps)
       const provider = selectedProvider;
       const model = selectedModels[provider];
       if (!model) {
-        toast.error(`Selecione um modelo para ${provider === 'openai' ? 'OpenAI' : provider === 'gemini' ? 'Gemini' : 'Grok'}`);
+        toast.error(
+          `Selecione um modelo para ${provider === 'openai' ? 'OpenAI' : provider === 'gemini' ? 'Gemini' : provider === 'anthropic' ? 'Claude' : 'Grok'}`
+        );
         return;
       }
 
@@ -339,6 +345,7 @@ export function ChapterChat({ currentChapterId, allChapters }: ChapterChatProps)
                     <SelectItem value="openai">OpenAI</SelectItem>
                     <SelectItem value="gemini">Gemini (Google)</SelectItem>
                     <SelectItem value="grok">Grok</SelectItem>
+                    <SelectItem value="anthropic">Claude</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

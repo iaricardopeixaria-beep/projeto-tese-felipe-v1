@@ -16,7 +16,7 @@ export async function analyzeDocumentForAdjustments(
   documentPath: string,
   instructions: string,
   creativity: number,
-  provider: 'openai' | 'gemini' | 'grok',
+  provider: 'openai' | 'gemini' | 'grok' | 'anthropic',
   model: string,
   apiKey: string,
   useGrounding: boolean = false
@@ -76,7 +76,7 @@ async function analyzeBatch(
   sectionTitle: string,
   instructions: string,
   creativity: number,
-  provider: 'openai' | 'gemini' | 'grok',
+  provider: 'openai' | 'gemini' | 'grok' | 'anthropic',
   model: string,
   apiKey: string,
   useGrounding: boolean = false
@@ -102,6 +102,18 @@ async function analyzeBatch(
 
     responseText = response.choices[0].message.content || '{}';
 
+  } else if (provider === 'anthropic') {
+    const { anthropicChat } = await import('@/lib/ai/anthropic');
+    const { text } = await anthropicChat({
+      apiKey,
+      model,
+      system:
+        'Responda apenas com um objeto JSON válido conforme o formato pedido no enunciado. Sem markdown.',
+      user: prompt,
+      maxTokens: 12000,
+      temperature: creativity / 10
+    });
+    responseText = text || '{}';
   } else {
     // Gemini with 429 retry (quota/rate limit)
     const genAI = new GoogleGenerativeAI(apiKey);

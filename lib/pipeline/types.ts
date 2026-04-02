@@ -26,33 +26,33 @@ export type PipelineStatus =
 export interface AdjustConfig {
   instructions: string;
   creativity: number; // 0-10
-  provider: 'openai' | 'gemini' | 'grok';
+  provider: 'openai' | 'gemini' | 'grok' | 'anthropic';
   model: string;
 }
 
 export interface UpdateConfig {
-  provider: 'gemini';
+  provider: 'openai' | 'gemini' | 'anthropic';
   model: string;
   /** Priorizar LexML/Senado/Data.gov.br antes de usar IA (recomendado). */
   useOfficialSources?: boolean;
 }
 
 export interface ImproveConfig {
-  provider: 'openai' | 'gemini';
+  provider: 'openai' | 'gemini' | 'anthropic';
   model: string;
 }
 
 export interface AdaptConfig {
   style: 'academic' | 'professional' | 'simplified' | 'custom';
   targetAudience?: string;
-  provider: 'openai' | 'gemini';
+  provider: 'openai' | 'gemini' | 'grok' | 'anthropic';
   model: string;
 }
 
 export interface TranslateConfig {
   sourceLanguage?: string;
   targetLanguage: string;
-  provider: 'openai' | 'gemini' | 'grok';
+  provider: 'openai' | 'gemini' | 'grok' | 'anthropic';
   model: string;
   maxPages?: number;
 }

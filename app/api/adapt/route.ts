@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
       sourceDocumentPath?: string;
       style?: 'academic' | 'professional' | 'simplified' | 'custom';
       targetAudience?: string;
-      provider?: 'openai' | 'gemini' | 'grok';
+      provider?: 'openai' | 'gemini' | 'grok' | 'anthropic';
       model?: string;
     } = await req.json();
 
@@ -169,11 +169,14 @@ async function executeAdapt(
     console.log(`[ADAPT ${jobId}] Analyzing ${structure.sections.length} sections...`);
 
     // Get API key
-    const apiKey = provider === 'openai'
-      ? process.env.OPENAI_API_KEY!
-      : provider === 'gemini'
-      ? (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)!
-      : process.env.GROK_API_KEY!;
+    const apiKey =
+      provider === 'openai'
+        ? process.env.OPENAI_API_KEY!
+        : provider === 'gemini'
+          ? (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)!
+          : provider === 'anthropic'
+            ? process.env.ANTHROPIC_API_KEY!
+            : process.env.GROK_API_KEY!;
 
     // Generate adaptation suggestions
     const suggestions = await analyzeDocumentForAdaptation(

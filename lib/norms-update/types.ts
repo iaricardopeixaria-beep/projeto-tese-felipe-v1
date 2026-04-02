@@ -60,7 +60,7 @@ export type NormUpdateJob = {
 };
 
 export type NormUpdateOptions = {
-  provider: 'openai' | 'gemini';
+  provider: 'openai' | 'gemini' | 'anthropic';
   model: string;
   onProgress?: (progress: {
     current: number;

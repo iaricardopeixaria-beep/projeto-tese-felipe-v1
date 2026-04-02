@@ -7,7 +7,7 @@ export const maxDuration = 30;
 
 export async function POST(request: NextRequest) {
   try {
-    const { provider } = await request.json() as { provider: 'openai' | 'gemini' | 'grok' };
+    const { provider } = await request.json() as { provider: 'openai' | 'gemini' | 'grok' | 'anthropic' };
 
     if (!provider) {
       return NextResponse.json(
@@ -27,6 +27,9 @@ export async function POST(request: NextRequest) {
         break;
       case 'grok':
         model = state.settings.models.grok[0];
+        break;
+      case 'anthropic':
+        model = state.settings.models.anthropic[0];
         break;
     }
 

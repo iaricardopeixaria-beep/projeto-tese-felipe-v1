@@ -28,7 +28,8 @@ interface AnswerCompareGridProps {
 const providerColors: Record<string, string> = {
   openai: 'bg-green-950/50 text-green-400 border-green-900',
   gemini: 'bg-blue-950/50 text-blue-400 border-blue-900',
-  grok: 'bg-purple-950/50 text-purple-400 border-purple-900'
+  grok: 'bg-purple-950/50 text-purple-400 border-purple-900',
+  anthropic: 'bg-orange-950/50 text-orange-300 border-orange-900'
 };
 
 export function AnswerCompareGrid({ answers }: AnswerCompareGridProps) {

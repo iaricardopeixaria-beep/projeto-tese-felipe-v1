@@ -17,7 +17,7 @@ export async function analyzeDocumentForAdaptation(
   documentPath: string,
   style: 'academic' | 'professional' | 'simplified' | 'custom',
   targetAudience: string | undefined,
-  provider: 'openai' | 'gemini' | 'grok',
+  provider: 'openai' | 'gemini' | 'grok' | 'anthropic',
   model: string,
   apiKey: string,
   onProgress?: (currentSection: number, totalSections: number, currentBatch?: number, totalBatches?: number) => Promise<void>,
@@ -136,7 +136,7 @@ async function analyzeBatch(
   sectionTitle: string,
   style: 'academic' | 'professional' | 'simplified' | 'custom',
   targetAudience: string | undefined,
-  provider: 'openai' | 'gemini' | 'grok',
+  provider: 'openai' | 'gemini' | 'grok' | 'anthropic',
   model: string,
   apiKey: string,
   onSavePartial?: () => Promise<void>
@@ -168,6 +168,21 @@ async function analyzeBatch(
         });
 
         responseText = response.choices[0].message.content || '{}';
+        const apiDuration = ((Date.now() - apiStartTime) / 1000).toFixed(1);
+        console.log(`[ADAPT]     → AI API responded in ${apiDuration}s`);
+
+      } else if (provider === 'anthropic') {
+        const { anthropicChat } = await import('@/lib/ai/anthropic');
+        const { text } = await anthropicChat({
+          apiKey,
+          model,
+          system:
+            'Responda apenas com um objeto JSON válido conforme o formato pedido. Sem markdown.',
+          user: prompt,
+          maxTokens: 12000,
+          temperature: 0.3
+        });
+        responseText = text || '{}';
         const apiDuration = ((Date.now() - apiStartTime) / 1000).toFixed(1);
         console.log(`[ADAPT]     → AI API responded in ${apiDuration}s`);
 

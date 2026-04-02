@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
       sourceDocumentPath?: string;
       instructions: string;
       creativity?: number;
-      provider?: 'openai' | 'gemini' | 'grok';
+      provider?: 'openai' | 'gemini' | 'grok' | 'anthropic';
       model?: string;
       useGrounding?: boolean;
     } = await req.json();
@@ -122,7 +122,7 @@ async function executeAdjust(
   sourceDocumentPath: string | undefined,
   instructions: string,
   creativity: number,
-  provider: 'openai' | 'gemini' | 'grok',
+  provider: 'openai' | 'gemini' | 'grok' | 'anthropic',
   model: string,
   useGrounding: boolean
 ) {
@@ -173,11 +173,14 @@ async function executeAdjust(
     console.log(`[ADJUST ${jobId}] Analyzing ${structure.sections.length} sections...`);
 
     // Get API key
-    const apiKey = provider === 'openai'
-      ? process.env.OPENAI_API_KEY!
-      : provider === 'gemini'
-      ? (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)!
-      : process.env.GROK_API_KEY!;
+    const apiKey =
+      provider === 'openai'
+        ? process.env.OPENAI_API_KEY!
+        : provider === 'gemini'
+          ? (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)!
+          : provider === 'anthropic'
+            ? process.env.ANTHROPIC_API_KEY!
+            : process.env.GROK_API_KEY!;
 
     // Generate adjustment suggestions
     const suggestions = await analyzeDocumentForAdjustments(

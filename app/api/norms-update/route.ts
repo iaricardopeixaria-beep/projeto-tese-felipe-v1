@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
 async function processNormsUpdate(
   jobId: string,
   doc: any,
-  provider: 'openai' | 'gemini',
+  provider: 'openai' | 'gemini' | 'anthropic',
   model: string,
   sourceDocumentPath?: string
 ) {
@@ -143,9 +143,12 @@ async function processNormsUpdate(
 
     // Detecta normas no documento
     console.log('[NORMS] Detecting norms...');
-    const apiKey = provider === 'openai'
-      ? process.env.OPENAI_API_KEY!
-      : (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)!;
+    const apiKey =
+      provider === 'openai'
+        ? process.env.OPENAI_API_KEY!
+        : provider === 'anthropic'
+          ? process.env.ANTHROPIC_API_KEY!
+          : (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY)!;
 
     let references = await detectNormsInDocument(
       paragraphsWithContext,

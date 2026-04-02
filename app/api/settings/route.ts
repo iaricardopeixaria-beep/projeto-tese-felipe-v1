@@ -20,12 +20,13 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { openaiKey, googleKey, xaiKey, models } = body;
+    const { openaiKey, googleKey, xaiKey, anthropicKey, models } = body;
 
     // Update settings in memory
     if (openaiKey !== undefined) state.settings.openaiKey = openaiKey;
     if (googleKey !== undefined) state.settings.googleKey = googleKey;
     if (xaiKey !== undefined) state.settings.xaiKey = xaiKey;
+    if (anthropicKey !== undefined) state.settings.anthropicKey = anthropicKey;
     if (models !== undefined) state.settings.models = models;
 
     return NextResponse.json({

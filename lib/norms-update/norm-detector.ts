@@ -7,7 +7,7 @@ import { randomUUID } from 'crypto';
  */
 export async function detectNormsInDocument(
   paragraphs: Array<{ text: string; index: number; chapterTitle?: string }>,
-  provider: 'openai' | 'gemini',
+  provider: 'openai' | 'gemini' | 'anthropic',
   model: string,
   apiKey: string
 ): Promise<NormReference[]> {
@@ -92,6 +92,18 @@ Retorne APENAS o JSON.`;
         });
 
         response = completion.choices[0]?.message?.content?.trim() || '{"references":[]}';
+      } else if (provider === 'anthropic') {
+        const { anthropicChat } = await import('@/lib/ai/anthropic');
+        const { text } = await anthropicChat({
+          apiKey,
+          model,
+          system:
+            'Responda estritamente com um único objeto JSON válido conforme o pedido. Sem markdown, sem texto fora do JSON.',
+          user: prompt,
+          maxTokens: 12000,
+          temperature: 0.1
+        });
+        response = text || '{"references":[]}';
       } else {
         // Gemini with 429 retry
         const { GoogleGenerativeAI } = await import('@google/generative-ai');
