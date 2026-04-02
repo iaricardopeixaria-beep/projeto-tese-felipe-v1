@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS adapt_jobs (
 
   -- Provider and model info
   provider TEXT NOT NULL DEFAULT 'openai',
-  model TEXT NOT NULL DEFAULT 'gpt-4o-mini',
+  model TEXT NOT NULL DEFAULT 'gpt-5.4-mini',
 
   -- Context and structure
   document_structure JSONB, -- { sections: [...], totalParagraphs }

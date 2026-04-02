@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
       style = 'simplified',
       targetAudience,
       provider = 'openai',
-      model = 'gpt-4o-mini'
+      model = 'gpt-5.4-mini'
     }: {
       documentId?: string;
       sourceDocumentPath?: string;

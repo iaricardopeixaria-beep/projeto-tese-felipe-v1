@@ -1,6 +1,7 @@
 import JSZip from 'jszip';
 import { parseStringPromise } from 'xml2js';
 import fs from 'fs/promises';
+import { isOpenAIGpt5Family } from '@/lib/ai/openai-compat';
 import { DocumentStructure, GlobalContext } from './types';
 
 /**
@@ -248,7 +249,7 @@ Retorne APENAS um JSON válido no formato:
     const completion = await openai.chat.completions.create({
       model,
       messages: [{ role: 'user', content: prompt }],
-      temperature: 0.3,
+      ...(isOpenAIGpt5Family(model) ? {} : { temperature: 0.3 }),
       max_tokens: 8000, // Aumentado para permitir análises globais muito detalhadas
       response_format: { type: 'json_object' }
     });

@@ -2,6 +2,7 @@ import OpenAI from 'openai';
 import { ChatRequest, AIResponse } from './types';
 import { buildSystemPrompt, buildUserPrompt, extractCitations } from './prompts';
 import { state } from '../state';
+import { isOpenAIGpt5Family } from './openai-compat';
 
 export async function executeOpenAI(
   request: ChatRequest,
@@ -25,7 +26,7 @@ export async function executeOpenAI(
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt }
         ],
-        temperature: 0.3,
+        ...(isOpenAIGpt5Family(request.model) ? {} : { temperature: 0.3 }),
         max_tokens: 8000 // Aumentado para permitir respostas muito detalhadas no chat
       });
 

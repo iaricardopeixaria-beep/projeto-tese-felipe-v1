@@ -28,7 +28,7 @@ export function ImproveButton({ documentId, documentTitle }: ImproveButtonProps)
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           provider: 'openai',
-          model: 'gpt-4o-mini'
+          model: 'gpt-5.4-mini'
         })
       });
 

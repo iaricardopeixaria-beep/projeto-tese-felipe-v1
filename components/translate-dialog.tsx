@@ -49,10 +49,15 @@ const PROVIDERS = {
 };
 
 const MODELS_BY_PROVIDER: Record<string, string[]> = {
-  openai: ['gpt-4o', 'gpt-4o-mini'],
-  gemini: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash'],
-  grok: ['grok-2-1212', 'grok-2-vision-1212'],
-  anthropic: ['claude-sonnet-4-20250514', 'claude-3-5-sonnet-20241022']
+  openai: ['gpt-5.4-mini', 'gpt-5.4'],
+  gemini: [
+    'gemini-3-flash-preview',
+    'gemini-2.5-flash',
+    'gemini-2.5-pro',
+    'gemini-2.5-flash-lite'
+  ],
+  grok: ['grok-4-1-fast-non-reasoning', 'grok-4-1-fast-reasoning'],
+  anthropic: ['claude-sonnet-4-6', 'claude-opus-4-6', 'claude-haiku-4-5']
 };
 
 export function TranslateDialog({ documentId, documentTitle }: TranslationDialogProps) {

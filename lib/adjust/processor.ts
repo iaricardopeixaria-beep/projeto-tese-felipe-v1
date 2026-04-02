@@ -6,6 +6,7 @@
 import { AdjustSuggestion } from './types';
 import { extractDocumentStructure } from '@/lib/improvement/document-analyzer';
 import { isGemini429, parseGeminiRetryDelayMs, sleep } from '@/lib/ai/gemini-retry';
+import { isOpenAIGpt5Family } from '@/lib/ai/openai-compat';
 import OpenAI from 'openai';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
@@ -95,7 +96,9 @@ async function analyzeBatch(
     const response = await client.chat.completions.create({
       model,
       messages: [{ role: 'user', content: prompt }],
-      temperature: creativity / 10, // Convert 0-10 to 0-1
+      ...(provider === 'grok' || !isOpenAIGpt5Family(model)
+        ? { temperature: creativity / 10 }
+        : {}),
       max_tokens: 12000, // Aumentado para permitir ajustes muito detalhados
       response_format: { type: 'json_object' }
     });

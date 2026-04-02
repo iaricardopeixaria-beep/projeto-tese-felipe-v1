@@ -1,5 +1,6 @@
 import { GlobalContext, ImprovementSuggestion, ImprovementType } from './types';
 import { isGemini429, parseGeminiRetryDelayMs, sleep } from '@/lib/ai/gemini-retry';
+import { isOpenAIGpt5Family } from '@/lib/ai/openai-compat';
 import { randomUUID } from 'crypto';
 
 /**
@@ -85,7 +86,7 @@ Retorne APENAS o JSON, sem texto adicional.`;
       const completion = await openai.chat.completions.create({
         model,
         messages: [{ role: 'user', content: prompt }],
-        temperature: 0.3,
+        ...(isOpenAIGpt5Family(model) ? {} : { temperature: 0.3 }),
         max_tokens: 12000, // Aumentado para permitir respostas muito detalhadas
         response_format: { type: 'json_object' }
       });

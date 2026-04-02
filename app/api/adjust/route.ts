@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
       instructions,
       creativity = 5,
       provider = 'openai',
-      model = 'gpt-4o-mini',
+      model = 'gpt-5.4-mini',
       useGrounding = false
     }: {
       documentId?: string;

@@ -24,7 +24,7 @@ export async function POST(
     const {
       versionId,
       provider = 'openai',
-      model = 'gpt-4o-mini',
+      model = 'gpt-5.4-mini',
       references = [],
       contextVersionIds = []
     }: {

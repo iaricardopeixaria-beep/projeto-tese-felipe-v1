@@ -1,5 +1,6 @@
 import { NormReference, NormStatus, UpdateType } from './types';
 import { isGemini429, parseGeminiRetryDelayMs, sleep } from '@/lib/ai/gemini-retry';
+import { isOpenAIGpt5Family } from '@/lib/ai/openai-compat';
 import { verifyWithOfficialSources } from './sources/official-sources';
 
 /**
@@ -194,7 +195,7 @@ JSON:
     const completion = await openai.chat.completions.create({
       model,
       messages: [{ role: 'user', content: prompt }],
-      temperature: 0.2,
+      ...(isOpenAIGpt5Family(model) ? {} : { temperature: 0.2 }),
       max_tokens: 8000, // Aumentado para permitir verificações muito detalhadas
       response_format: { type: 'json_object' }
     });
@@ -215,7 +216,10 @@ JSON:
     response = text || '{}';
   } else {
     // Gemini com Google Search (grounding), com retry em 429
-    const groundingModel = model === 'gemini-flash-latest' ? 'gemini-2.5-flash' : model;
+    const groundingModel =
+      model === 'gemini-flash-latest' || /^gemini-3/i.test(model)
+        ? 'gemini-2.5-flash'
+        : model;
     console.log(`[NORMS] Initializing Gemini with model: ${groundingModel} (original: ${model})`);
 
     const { GoogleGenerativeAI } = await import('@google/generative-ai');

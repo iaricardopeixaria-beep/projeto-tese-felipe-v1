@@ -1178,12 +1178,19 @@ function estimateCost(elements: TextElement[], options: TranslationOptions): num
 
   // Custos aproximados por 1M tokens (input + output)
   const costs: Record<string, number> = {
+    'gpt-5.4': 17.5,
+    'gpt-5.4-mini': 5.25,
     'gpt-4o': 7.5,
     'gpt-4o-mini': 0.45,
     'gpt-4-turbo': 20,
+    'gemini-3-flash-preview': 0.15,
     'gemini-2.5-flash': 0.15,
+    'gemini-2.5-flash-lite': 0.1,
     'gemini-2.5-pro': 3.0,
     'gemini-2.0-flash': 0.15,
+    'grok-4-1-fast-non-reasoning': 0.7,
+    'grok-4-1-fast-reasoning': 0.7,
+    'grok-4.20-0309-non-reasoning': 8,
     'grok-2-1212': 5,
     'grok-2-vision-1212': 5
   };

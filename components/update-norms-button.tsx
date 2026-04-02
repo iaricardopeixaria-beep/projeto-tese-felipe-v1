@@ -18,8 +18,8 @@ type NormsProvider = 'gemini' | 'anthropic' | 'openai';
 
 const DEFAULT_MODELS: Record<NormsProvider, string> = {
   gemini: 'gemini-2.5-flash',
-  anthropic: 'claude-sonnet-4-20250514',
-  openai: 'gpt-4o'
+  anthropic: 'claude-sonnet-4-6',
+  openai: 'gpt-5.4-mini'
 };
 
 interface UpdateNormsButtonProps {
@@ -43,11 +43,13 @@ export function UpdateNormsButton({ documentId, documentTitle }: UpdateNormsButt
         const s = data.settings;
         if (cancelled || !s?.models) return;
         setModelsByProvider({
-          gemini: s.models.gemini?.length ? s.models.gemini : ['gemini-2.5-flash'],
+          gemini: s.models.gemini?.length
+            ? s.models.gemini
+            : ['gemini-3-flash-preview', 'gemini-2.5-flash'],
           anthropic: s.models.anthropic?.length
             ? s.models.anthropic
-            : ['claude-sonnet-4-20250514', 'claude-3-5-sonnet-20241022'],
-          openai: s.models.openai?.length ? s.models.openai : ['gpt-4o', 'gpt-4o-mini']
+            : ['claude-sonnet-4-6', 'claude-opus-4-6', 'claude-haiku-4-5'],
+          openai: s.models.openai?.length ? s.models.openai : ['gpt-5.4-mini', 'gpt-5.4']
         });
       } catch {
         /* keep defaults */

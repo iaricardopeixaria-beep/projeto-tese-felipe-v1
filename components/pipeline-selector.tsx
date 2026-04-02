@@ -405,10 +405,10 @@ function TranslateConfig({ config, onChange }: any) {
 
 function ModelSelector({ config, onChange, providers }: { config: any; onChange: any; providers: string[] }) {
   const MODELS: Record<string, string[]> = {
-    openai: ['gpt-4o', 'gpt-4o-mini'],
-    gemini: ['gemini-2.5-flash', 'gemini-2.5-pro'],
-    grok: ['grok-2-1212'],
-    anthropic: ['claude-sonnet-4-20250514', 'claude-3-5-sonnet-20241022']
+    openai: ['gpt-5.4-mini', 'gpt-5.4'],
+    gemini: ['gemini-3-flash-preview', 'gemini-2.5-flash', 'gemini-2.5-pro'],
+    grok: ['grok-4-1-fast-non-reasoning', 'grok-4-1-fast-reasoning'],
+    anthropic: ['claude-sonnet-4-6', 'claude-opus-4-6', 'claude-haiku-4-5']
   };
 
   return (
@@ -463,15 +463,20 @@ function FlowArrow() {
 function getDefaultConfig(op: PipelineOperation): any {
   switch (op) {
     case 'adjust':
-      return { instructions: '', creativity: 5, provider: 'openai', model: 'gpt-4o-mini' };
+      return { instructions: '', creativity: 5, provider: 'openai', model: 'gpt-5.4-mini' };
     case 'update':
-      return { provider: 'gemini', model: 'gemini-2.5-flash' };
+      return { provider: 'gemini', model: 'gemini-3-flash-preview' };
     case 'improve':
-      return { provider: 'openai', model: 'gpt-4o-mini' };
+      return { provider: 'openai', model: 'gpt-5.4-mini' };
     case 'adapt':
-      return { style: 'simplified', provider: 'openai', model: 'gpt-4o-mini' };
+      return { style: 'simplified', provider: 'openai', model: 'gpt-5.4-mini' };
     case 'translate':
-      return { sourceLanguage: 'auto', targetLanguage: '', provider: 'gemini', model: 'gemini-2.5-flash' };
+      return {
+        sourceLanguage: 'auto',
+        targetLanguage: '',
+        provider: 'gemini',
+        model: 'gemini-3-flash-preview'
+      };
   }
 }
 

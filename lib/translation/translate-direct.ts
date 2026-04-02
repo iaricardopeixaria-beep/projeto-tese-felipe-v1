@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import OpenAI from 'openai';
+import { isOpenAIGpt5Family } from '@/lib/ai/openai-compat';
 import { AIProvider } from '../ai/types';
 import { state } from '../state';
 import { isGemini429, parseGeminiRetryDelayMs, sleep } from '../ai/gemini-retry';
@@ -233,7 +234,7 @@ async function translateWithOpenAI(prompt: string, model: string, maxTokens: num
         {
           model,
           messages: [{ role: 'user', content: prompt }],
-          temperature: 0.3,
+          ...(isOpenAIGpt5Family(model) ? {} : { temperature: 0.3 }),
           max_tokens: maxTokens
         },
         { signal: controller.signal }

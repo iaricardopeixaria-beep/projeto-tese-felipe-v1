@@ -5,6 +5,7 @@ import { analyzeSectionForImprovements } from '@/lib/improvement/section-analyze
 import { analyzeDocumentForAdjustments } from '@/lib/adjust/processor';
 import { AIProvider } from '@/lib/ai/types';
 import { isGemini429, parseGeminiRetryDelayMs, sleep } from '@/lib/ai/gemini-retry';
+import { isOpenAIGpt5Family } from '@/lib/ai/openai-compat';
 import { SupportedLanguage } from '@/lib/translation/types';
 import { processChapterVersion } from './chapter-processor';
 import { processReferences, formatReferencesForContext, type ReferenceInput } from './reference-processor';
@@ -1104,7 +1105,7 @@ Retorne APENAS o JSON, sem texto adicional.`;
       const completion = await client.chat.completions.create({
         model,
         messages: [{ role: 'user', content: prompt }],
-        temperature: 0.3,
+        ...(provider === 'grok' || !isOpenAIGpt5Family(model) ? { temperature: 0.3 } : {}),
         max_tokens: 12000, // Aumentado para permitir atualizações muito detalhadas
         response_format: { type: 'json_object' }
       });
@@ -1228,7 +1229,7 @@ Respond with ONLY a JSON object in this format:
     const response = await client.chat.completions.create({
       model,
       messages: [{ role: 'user', content: prompt }],
-      temperature: 0.3, // Lower temperature for more consistent translations
+      ...(provider === 'grok' || !isOpenAIGpt5Family(model) ? { temperature: 0.3 } : {}),
       response_format: { type: 'json_object' }
     });
 

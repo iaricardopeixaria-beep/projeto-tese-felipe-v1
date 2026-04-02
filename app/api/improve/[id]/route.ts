@@ -15,7 +15,7 @@ export async function POST(
     const { id: documentId } = await params;
     const {
       provider = 'openai',
-      model = 'gpt-4o-mini',
+      model = 'gpt-5.4-mini',
       sourceDocumentPath // Optional: for pipeline usage
     } = await req.json();
 

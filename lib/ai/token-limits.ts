@@ -81,21 +81,30 @@ export function getTokenLimit(operation: keyof typeof TOKEN_LIMITS, subOperation
  */
 export const MODEL_MAX_OUTPUT_TOKENS: Record<string, number> = {
   // OpenAI
+  'gpt-5.4': 128000,
+  'gpt-5.4-mini': 128000,
   'gpt-4o': 16384,
   'gpt-4o-mini': 16384,
   'gpt-4-turbo': 4096,
   'gpt-4': 4096,
   'gpt-3.5-turbo': 4096,
-  
+
   // Gemini
+  'gemini-3-flash-preview': 8192,
+  'gemini-2.5-flash': 8192,
+  'gemini-2.5-flash-lite': 8192,
+  'gemini-2.5-pro': 8192,
   'gemini-2.0-flash-exp': 8192,
   'gemini-1.5-pro': 8192,
   'gemini-1.5-flash': 8192,
   'gemini-pro': 8192,
-  
+
   // Grok
   'grok-beta': 4096,
   'grok-2': 4096,
+  'grok-4-1-fast-non-reasoning': 8192,
+  'grok-4-1-fast-reasoning': 8192,
+  'grok-4.20-0309-non-reasoning': 8192,
 };
 
 /**

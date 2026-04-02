@@ -113,22 +113,42 @@ export const state: {
     xaiKey: process.env.XAI_API_KEY ?? "",
     anthropicKey: process.env.ANTHROPIC_API_KEY ?? "",
     models: {
-      openai: ["gpt-4o-mini", "gpt-4o"],
-      gemini: ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"],
-      grok: ["grok-2-1212", "grok-2-vision-1212"],
-      anthropic: ["claude-sonnet-4-20250514", "claude-3-5-sonnet-20241022"]
+      openai: ["gpt-5.4-mini", "gpt-5.4"],
+      gemini: [
+        "gemini-3-flash-preview",
+        "gemini-2.5-flash",
+        "gemini-2.5-pro",
+        "gemini-2.5-flash-lite"
+      ],
+      grok: [
+        "grok-4-1-fast-non-reasoning",
+        "grok-4-1-fast-reasoning",
+        "grok-4.20-0309-non-reasoning"
+      ],
+      anthropic: ["claude-sonnet-4-6", "claude-opus-4-6", "claude-haiku-4-5"]
     },
     pricesUSD: {
-      // Preços aproximados por 1K tokens
+      // Preços aproximados por 1K tokens (valores legados mantidos para settings antigos)
+      "gpt-5.4": { in: 0.0025, out: 0.015 },
+      "gpt-5.4-mini": { in: 0.00075, out: 0.0045 },
       "gpt-4o-mini": { in: 0.00015, out: 0.0006 },
       "gpt-4o": { in: 0.005, out: 0.015 },
+      "gemini-3-flash-preview": { in: 0.000075, out: 0.0003 },
       "gemini-2.5-flash": { in: 0.000075, out: 0.0003 },
+      "gemini-2.5-flash-lite": { in: 0.00005, out: 0.0002 },
       "gemini-2.5-pro": { in: 0.00125, out: 0.005 },
       "gemini-2.0-flash": { in: 0.000075, out: 0.0003 },
       "gemini-flash-latest": { in: 0.000075, out: 0.0003 },
       "gemini-pro-latest": { in: 0.00125, out: 0.005 },
+      "grok-4-1-fast-non-reasoning": { in: 0.0002, out: 0.0005 },
+      "grok-4-1-fast-reasoning": { in: 0.0002, out: 0.0005 },
+      "grok-4.20-0309-non-reasoning": { in: 0.002, out: 0.006 },
+      "grok-4.20-0309-reasoning": { in: 0.002, out: 0.006 },
       "grok-2-1212": { in: 0.002, out: 0.01 },
       "grok-2-vision-1212": { in: 0.002, out: 0.01 },
+      "claude-sonnet-4-6": { in: 0.003, out: 0.015 },
+      "claude-opus-4-6": { in: 0.005, out: 0.025 },
+      "claude-haiku-4-5": { in: 0.001, out: 0.005 },
       "claude-sonnet-4-20250514": { in: 0.003, out: 0.015 },
       "claude-3-5-sonnet-20241022": { in: 0.003, out: 0.015 },
       "claude-3-5-haiku-20241022": { in: 0.0008, out: 0.004 }
