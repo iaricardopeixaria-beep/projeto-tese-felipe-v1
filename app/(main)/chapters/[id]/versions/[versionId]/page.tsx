@@ -30,6 +30,11 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { ExpandableTextarea } from '@/components/expandable-textarea';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ContextSelector } from '@/components/thesis/context-selector';
+import {
+  ChapterOperationAiFields,
+  type ChapterOpAIProvider,
+  modelsForProvider
+} from '@/components/thesis/chapter-operation-ai-fields';
 
 type ChapterVersion = {
   id: string;
@@ -61,6 +66,24 @@ export default function ChapterVersionPage() {
   const [allChapters, setAllChapters] = useState<any[]>([]);
   const [contextVersionIds, setContextVersionIds] = useState<string[]>([]);
 
+  const [settingsModels, setSettingsModels] = useState<
+    Partial<Record<ChapterOpAIProvider, string[]>> | null
+  >(null);
+
+  const [improveProvider, setImproveProvider] = useState<ChapterOpAIProvider>('openai');
+  const [improveModel, setImproveModel] = useState('');
+  const [translateProvider, setTranslateProvider] = useState<ChapterOpAIProvider>('openai');
+  const [translateModel, setTranslateModel] = useState('');
+  const [adjustProvider, setAdjustProvider] = useState<ChapterOpAIProvider>('gemini');
+  const [adjustModel, setAdjustModel] = useState('');
+  const [adaptProvider, setAdaptProvider] = useState<ChapterOpAIProvider>('openai');
+  const [adaptModel, setAdaptModel] = useState('');
+  const [updateProvider, setUpdateProvider] = useState<ChapterOpAIProvider>('gemini');
+  const [updateModel, setUpdateModel] = useState('');
+  const [revisarNormsProvider, setRevisarNormsProvider] =
+    useState<ChapterOpAIProvider>('gemini');
+  const [revisarNormsModel, setRevisarNormsModel] = useState('');
+
   // Operation states
   const [improveDialogOpen, setImproveDialogOpen] = useState(false);
   const [translateDialogOpen, setTranslateDialogOpen] = useState(false);
@@ -84,13 +107,8 @@ export default function ChapterVersionPage() {
   const [adjustPrompt, setAdjustPrompt] = useState('');
   const [adjustCreativity, setAdjustCreativity] = useState(5);
   const [adjustUseGrounding, setAdjustUseGrounding] = useState(false);
-  // Fixed to Gemini 2.5 Flash
-  const adjustProvider = 'gemini' as const;
-  const adjustModel = 'gemini-2.5-flash' as const;
-  const [adaptPrompt, setAdaptPrompt] = useState('');
   const [adaptStyle, setAdaptStyle] = useState<'academic' | 'professional' | 'simplified' | 'custom'>('simplified');
   const [adaptTargetAudience, setAdaptTargetAudience] = useState('');
-  const [updatePrompt, setUpdatePrompt] = useState('');
 
   const loadVersionData = async () => {
     try {
@@ -161,6 +179,40 @@ export default function ChapterVersionPage() {
     loadVersionData();
   }, [chapterId, versionId]);
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/settings');
+        const data = await res.json();
+        if (cancelled) return;
+        const m = data.settings?.models || {};
+        setSettingsModels(m);
+        const first = (p: ChapterOpAIProvider) => modelsForProvider(m, p)[0] || '';
+        setImproveModel((prev) => prev || first('openai'));
+        setTranslateModel((prev) => prev || first('openai'));
+        setAdjustModel((prev) => prev || first('gemini'));
+        setAdaptModel((prev) => prev || first('openai'));
+        setUpdateModel((prev) => prev || first('gemini'));
+        setRevisarNormsModel((prev) => prev || first('gemini'));
+      } catch (e) {
+        console.error('[VERSION-PAGE] Settings load error:', e);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const changeAdjustProvider = (p: ChapterOpAIProvider) => {
+    if (adjustUseGrounding && p !== 'gemini') {
+      toast.info('Pesquisa na internet só está disponível com Google Gemini.');
+      setAdjustUseGrounding(false);
+    }
+    setAdjustProvider(p);
+    setAdjustModel(modelsForProvider(settingsModels, p)[0] || '');
+  };
+
   const handleDownload = async () => {
     try {
       toast.info('Iniciando download...');
@@ -189,6 +241,10 @@ export default function ChapterVersionPage() {
   };
 
   const handleImprove = async () => {
+    if (!improveModel) {
+      toast.error('Selecione o provedor e o modelo de IA');
+      return;
+    }
     try {
       setProcessing(true);
       toast.info('Iniciando análise de melhorias...');
@@ -210,6 +266,8 @@ export default function ChapterVersionPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           versionId,
+          provider: improveProvider,
+          model: improveModel,
           references: referencesForAPI,
           contextVersionIds
         })
@@ -237,6 +295,10 @@ export default function ChapterVersionPage() {
       toast.error('Selecione o idioma de destino');
       return;
     }
+    if (!translateModel) {
+      toast.error('Selecione o provedor e o modelo de IA');
+      return;
+    }
 
     try {
       setProcessing(true);
@@ -260,6 +322,8 @@ export default function ChapterVersionPage() {
         body: JSON.stringify({
           versionId,
           targetLanguage,
+          provider: translateProvider,
+          model: translateModel,
           references: referencesForAPI
         })
       });
@@ -284,6 +348,10 @@ export default function ChapterVersionPage() {
   const handleAdjust = async () => {
     if (!adjustPrompt.trim()) {
       toast.error('Por favor, descreva o ajuste que deseja realizar');
+      return;
+    }
+    if (!adjustModel) {
+      toast.error('Selecione o provedor e o modelo de IA');
       return;
     }
 
@@ -341,6 +409,11 @@ export default function ChapterVersionPage() {
       return;
     }
 
+    if (!adaptModel) {
+      toast.error('Selecione o provedor e o modelo de IA');
+      return;
+    }
+
     try {
       setProcessing(true);
       toast.info('Iniciando adaptação...');
@@ -363,6 +436,8 @@ export default function ChapterVersionPage() {
           versionId,
           style: adaptStyle,
           targetAudience: adaptStyle === 'custom' ? adaptTargetAudience.trim() : undefined,
+          provider: adaptProvider,
+          model: adaptModel,
           references: referencesForAPI,
           contextVersionIds
         })
@@ -391,6 +466,10 @@ export default function ChapterVersionPage() {
     if (updateReferences.length === 0) {
       toast.warning('Nenhuma referência adicionada. Recomenda-se adicionar materiais de referência para atualização.');
     }
+    if (!updateModel) {
+      toast.error('Selecione o provedor e o modelo de IA');
+      return;
+    }
 
     try {
       setProcessing(true);
@@ -412,6 +491,8 @@ export default function ChapterVersionPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           versionId,
+          provider: updateProvider,
+          model: updateModel,
           references: referencesForAPI,
           contextVersionIds
         })
@@ -439,13 +520,20 @@ export default function ChapterVersionPage() {
       toast.info('Marque pelo menos uma opção de revisão (ex.: Atualizar normas)');
       return;
     }
+    if (!revisarNormsModel) {
+      toast.error('Selecione o provedor e o modelo de IA para revisão de normas');
+      return;
+    }
     try {
       setRevisarLoading(true);
       toast.loading('Iniciando análise de normas...');
       const res = await fetch(`/api/chapters/${chapterId}/versions/${versionId}/norms-update`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ provider: 'gemini', model: 'gemini-2.5-flash' })
+        body: JSON.stringify({
+          provider: revisarNormsProvider,
+          model: revisarNormsModel
+        })
       });
       if (!res.ok) {
         const err = await res.json();
@@ -721,6 +809,19 @@ export default function ChapterVersionPage() {
                     Analisar o capítulo para identificar oportunidades de melhoria. Uma nova versão será criada.
                   </DialogDescription>
                 </DialogHeader>
+                <div className="px-6 pt-2">
+                  <ChapterOperationAiFields
+                    provider={improveProvider}
+                    model={improveModel}
+                    onProviderChange={(p) => {
+                      setImproveProvider(p);
+                      setImproveModel(modelsForProvider(settingsModels, p)[0] || '');
+                    }}
+                    onModelChange={setImproveModel}
+                    settingsModels={settingsModels}
+                    disabled={processing}
+                  />
+                </div>
                 <ScrollArea className="max-h-[60vh] pr-4">
                   <div className="space-y-4 py-4">
                     {allChapters.length > 0 && (
@@ -753,7 +854,7 @@ export default function ChapterVersionPage() {
                   </Button>
                   <Button
                     onClick={handleImprove}
-                    disabled={processing}
+                    disabled={processing || !improveModel}
                   >
                     {processing ? 'Processando...' : 'Iniciar Análise'}
                   </Button>
@@ -779,6 +880,19 @@ export default function ChapterVersionPage() {
                     Traduzir o capítulo para outro idioma. Uma nova versão será criada.
                   </DialogDescription>
                 </DialogHeader>
+                <div className="px-6 pt-2">
+                  <ChapterOperationAiFields
+                    provider={translateProvider}
+                    model={translateModel}
+                    onProviderChange={(p) => {
+                      setTranslateProvider(p);
+                      setTranslateModel(modelsForProvider(settingsModels, p)[0] || '');
+                    }}
+                    onModelChange={setTranslateModel}
+                    settingsModels={settingsModels}
+                    disabled={processing}
+                  />
+                </div>
                 <ScrollArea className="max-h-[60vh] pr-4">
                   <div className="space-y-4 py-4">
                     <div className="space-y-2">
@@ -820,7 +934,7 @@ export default function ChapterVersionPage() {
                   </Button>
                   <Button
                     onClick={handleTranslate}
-                    disabled={processing || !targetLanguage}
+                    disabled={processing || !targetLanguage || !translateModel}
                   >
                     {processing ? 'Processando...' : 'Iniciar Tradução'}
                   </Button>
@@ -846,6 +960,16 @@ export default function ChapterVersionPage() {
                     Descreva especificamente o que deseja ajustar. Uma nova versão será criada.
                   </DialogDescription>
                 </DialogHeader>
+                <div className="px-6 pt-2">
+                  <ChapterOperationAiFields
+                    provider={adjustProvider}
+                    model={adjustModel}
+                    onProviderChange={changeAdjustProvider}
+                    onModelChange={setAdjustModel}
+                    settingsModels={settingsModels}
+                    disabled={processing}
+                  />
+                </div>
                 <ScrollArea className="max-h-[60vh] pr-4">
                   <div className="space-y-4 py-4">
                     {allChapters.length > 0 && (
@@ -922,7 +1046,16 @@ export default function ChapterVersionPage() {
                           id="adjust-grounding"
                           checked={adjustUseGrounding}
                           onCheckedChange={(checked) => {
-                            setAdjustUseGrounding(checked as boolean);
+                            const on = !!checked;
+                            if (on && adjustProvider !== 'gemini') {
+                              const list = modelsForProvider(settingsModels, 'gemini');
+                              setAdjustProvider('gemini');
+                              setAdjustModel(list[0] || '');
+                              toast.info(
+                                'Provedor alterado para Gemini — necessário para pesquisa na web.'
+                              );
+                            }
+                            setAdjustUseGrounding(on);
                           }}
                         />
                         <div className="space-y-1 flex-1">
@@ -933,7 +1066,7 @@ export default function ChapterVersionPage() {
                             Usar pesquisa na internet (Google Search Grounding)
                           </Label>
                           <p className="text-xs text-blue-700">
-                            A IA usará o Google Gemini 2.5 Flash para analisar o documento e poderá pesquisar informações atualizadas na internet para aplicar suas instruções com mais precisão.
+                            Usa o modelo Gemini selecionado acima com Google Search. Se mudar o provedor para outro que não seja Gemini, esta opção será desligada automaticamente.
                           </p>
                         </div>
                       </div>
@@ -961,7 +1094,7 @@ export default function ChapterVersionPage() {
                   </Button>
                   <Button
                     onClick={handleAdjust}
-                    disabled={processing || !adjustPrompt.trim()}
+                    disabled={processing || !adjustPrompt.trim() || !adjustModel}
                   >
                     {processing ? 'Processando...' : 'Iniciar Ajuste'}
                   </Button>
@@ -987,6 +1120,19 @@ export default function ChapterVersionPage() {
                     Adapte o capítulo para um estilo ou público-alvo diferente. Uma nova versão será criada.
                   </DialogDescription>
                 </DialogHeader>
+                <div className="px-6 pt-2">
+                  <ChapterOperationAiFields
+                    provider={adaptProvider}
+                    model={adaptModel}
+                    onProviderChange={(p) => {
+                      setAdaptProvider(p);
+                      setAdaptModel(modelsForProvider(settingsModels, p)[0] || '');
+                    }}
+                    onModelChange={setAdaptModel}
+                    settingsModels={settingsModels}
+                    disabled={processing}
+                  />
+                </div>
                 <ScrollArea className="max-h-[60vh] pr-4">
                   <div className="space-y-4 py-4">
                     {allChapters.length > 0 && (
@@ -1055,7 +1201,11 @@ export default function ChapterVersionPage() {
                   </Button>
                   <Button
                     onClick={handleAdapt}
-                    disabled={processing || (adaptStyle === 'custom' && !adaptTargetAudience.trim())}
+                    disabled={
+                      processing ||
+                      !adaptModel ||
+                      (adaptStyle === 'custom' && !adaptTargetAudience.trim())
+                    }
                   >
                     {processing ? 'Processando...' : 'Iniciar Adaptação'}
                   </Button>
@@ -1085,6 +1235,17 @@ export default function ChapterVersionPage() {
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 py-4">
+                  <ChapterOperationAiFields
+                    provider={revisarNormsProvider}
+                    model={revisarNormsModel}
+                    onProviderChange={(p) => {
+                      setRevisarNormsProvider(p);
+                      setRevisarNormsModel(modelsForProvider(settingsModels, p)[0] || '');
+                    }}
+                    onModelChange={setRevisarNormsModel}
+                    settingsModels={settingsModels}
+                    disabled={revisarLoading}
+                  />
                   <div className="flex items-start space-x-3 p-3 rounded-lg border bg-muted/50">
                     <Checkbox
                       id="revisar-normas"
@@ -1105,7 +1266,12 @@ export default function ChapterVersionPage() {
                   <Button variant="ghost" onClick={() => setRevisarDialogOpen(false)} disabled={revisarLoading}>
                     Cancelar
                   </Button>
-                  <Button onClick={handleRevisar} disabled={revisarLoading || !revisarAtualizarNormas}>
+                  <Button
+                    onClick={handleRevisar}
+                    disabled={
+                      revisarLoading || !revisarAtualizarNormas || !revisarNormsModel
+                    }
+                  >
                     {revisarLoading ? (
                       <>
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -1137,6 +1303,19 @@ export default function ChapterVersionPage() {
                     Atualize o capítulo com base em materiais de referência (links, arquivos, documentos). Uma nova versão será criada.
                   </DialogDescription>
                 </DialogHeader>
+                <div className="px-6 pt-2">
+                  <ChapterOperationAiFields
+                    provider={updateProvider}
+                    model={updateModel}
+                    onProviderChange={(p) => {
+                      setUpdateProvider(p);
+                      setUpdateModel(modelsForProvider(settingsModels, p)[0] || '');
+                    }}
+                    onModelChange={setUpdateModel}
+                    settingsModels={settingsModels}
+                    disabled={processing}
+                  />
+                </div>
                 <ScrollArea className="max-h-[60vh] pr-4">
                   <div className="space-y-4 py-4">
                     {allChapters.length > 0 && (
@@ -1185,7 +1364,7 @@ export default function ChapterVersionPage() {
                   </Button>
                   <Button
                     onClick={handleUpdate}
-                    disabled={processing}
+                    disabled={processing || !updateModel}
                   >
                     {processing ? 'Processando...' : 'Iniciar Atualização'}
                   </Button>
