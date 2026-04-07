@@ -120,7 +120,7 @@ export default function MainLayout({
                 )}
                 <div className="relative flex items-center gap-2">
                   <FileText className="h-4 w-4" />
-                  <span className="hidden sm:inline">Documentos</span>
+                  <span className="hidden sm:inline">Dashboard</span>
                 </div>
               </Link>
 

@@ -97,7 +97,7 @@ export default function HomePage() {
               className="h-11 px-6"
             >
               <FolderPlus className="mr-2 h-5 w-5" />
-              Novo Projeto
+              Nova Tese completa
             </Button>
             <Button
               onClick={() => setNewThesisDialogOpen(true)}

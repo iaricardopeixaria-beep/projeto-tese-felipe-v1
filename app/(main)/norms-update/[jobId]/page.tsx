@@ -482,7 +482,7 @@ export default function NormUpdatePage() {
               Requer Verificação Manual ({manualUpdates.length})
             </CardTitle>
             <CardDescription>
-              Normas técnicas pagas (ABNT/ISO) - verifique manualmente
+              Normas ABNT ou ISO e outros casos sem atualização automática — confira no original quando necessário
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -556,12 +556,16 @@ function ReferenceCard({
             <StatusIcon className="h-3 w-3 mr-1" />
             {statusInfo.label}
           </Badge>
-          <Badge variant="outline">{TYPE_LABELS[reference.type]}</Badge>
-          {reference.isPaid && (
-            <Badge variant="outline" className="bg-orange-100 text-orange-700">
-              Norma Paga
-            </Badge>
-          )}
+          <Badge
+            variant="outline"
+            className={
+              reference.type === 'abnt' || reference.type === 'iso'
+                ? 'bg-orange-100 text-orange-700 border-orange-200'
+                : ''
+            }
+          >
+            {TYPE_LABELS[reference.type] ?? reference.type}
+          </Badge>
         </div>
         {reference.confidence && (
           <Badge variant="outline">
@@ -629,14 +633,6 @@ function ReferenceCard({
               Aceitar
             </Button>
           )}
-        </div>
-      )}
-
-      {isManual && (
-        <div className="mt-4 p-3 bg-orange-100 border border-orange-300 rounded">
-          <p className="text-sm text-orange-800">
-            ⚠️ Esta é uma norma técnica paga. Você precisa verificar manualmente a atualização no site oficial.
-          </p>
         </div>
       )}
     </div>

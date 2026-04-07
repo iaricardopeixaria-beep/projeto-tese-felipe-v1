@@ -76,10 +76,19 @@ export async function POST(
     if (insertError) {
       await fs.unlink(tempFilePath).catch(() => {});
       console.error('[NORMS] Error creating chapter norms job:', insertError);
-      return NextResponse.json(
-        { error: 'Falha ao criar job de normas' },
-        { status: 500 }
-      );
+      const rawMsg = insertError.message || '';
+      const missingChapterVersionColumn =
+        insertError.code === 'PGRST204' &&
+        rawMsg.includes('chapter_version_id');
+      const body: { error: string; details?: string } = {
+        error: missingChapterVersionColumn
+          ? 'A tabela norm_update_jobs no Supabase ainda não tem a coluna chapter_version_id. Abra o SQL Editor e execute supabase/migrations/020_ensure_norm_update_jobs_chapter_version_id.sql (ou rode supabase db push). Depois, se o erro persistir, aguarde ~1 min ou recarregue o projeto.'
+          : 'Falha ao criar job de normas'
+      };
+      if (process.env.NODE_ENV === 'development' && !missingChapterVersionColumn) {
+        body.details = rawMsg;
+      }
+      return NextResponse.json(body, { status: 500 });
     }
 
     processNormsUpdate(jobId, tempFilePath, provider, model).catch(err => {
