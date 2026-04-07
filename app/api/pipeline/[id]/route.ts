@@ -76,8 +76,10 @@ async function getOperationProgress(
         const percentage = improveJob.progress_percentage || 0;
         const message =
           improveJob.status === 'analyzing' && improveJob.total_sections > 0
-            ? `Analisando seção ${improveJob.current_section + 1} de ${improveJob.total_sections}`
-            : undefined;
+            ? `Lendo trecho ${improveJob.current_section + 1} de ${improveJob.total_sections}`
+            : improveJob.status === 'analyzing'
+              ? 'Analisando o documento…'
+              : undefined;
 
         return { percentage, message };
       }
@@ -94,8 +96,10 @@ async function getOperationProgress(
         const percentage = translateJob.progress_percentage || 0;
         const message =
           translateJob.status === 'translating' && translateJob.total_chunks > 0
-            ? `Traduzindo chunk ${translateJob.current_chunk + 1} de ${translateJob.total_chunks}`
-            : undefined;
+            ? `Traduzindo parte ${translateJob.current_chunk + 1} de ${translateJob.total_chunks}`
+            : translateJob.status === 'translating'
+              ? 'Traduzindo…'
+              : undefined;
 
         return { percentage, message };
       }
@@ -112,8 +116,10 @@ async function getOperationProgress(
         const percentage = adjustJob.progress_percentage || 0;
         const message =
           adjustJob.status === 'adjusting' && adjustJob.total_sections > 0
-            ? `Ajustando seção ${adjustJob.current_section + 1} de ${adjustJob.total_sections}`
-            : undefined;
+            ? `Aplicando ajustes — trecho ${adjustJob.current_section + 1} de ${adjustJob.total_sections}`
+            : adjustJob.status === 'adjusting'
+              ? 'Aplicando ajustes…'
+              : undefined;
 
         return { percentage, message };
       }
@@ -130,8 +136,10 @@ async function getOperationProgress(
         const percentage = adaptJob.progress_percentage || 0;
         const message =
           adaptJob.status === 'adapting' && adaptJob.total_sections > 0
-            ? `Adaptando seção ${adaptJob.current_section + 1} de ${adaptJob.total_sections}`
-            : undefined;
+            ? `Adaptando o texto — trecho ${adaptJob.current_section + 1} de ${adaptJob.total_sections}`
+            : adaptJob.status === 'adapting'
+              ? 'Adaptando o texto…'
+              : undefined;
 
         return { percentage, message };
       }
@@ -152,9 +160,9 @@ async function getOperationProgress(
         const current = updateJob.current_reference || 0;
         const message =
           updateJob.status === 'analyzing' && total > 0
-            ? `Verificando referência ${current} de ${total}`
+            ? `Verificando citação ${current} de ${total}`
             : updateJob.status === 'analyzing'
-              ? 'Analisando normas…'
+              ? 'Verificando leis e normas…'
               : undefined;
 
         return { percentage, message };
