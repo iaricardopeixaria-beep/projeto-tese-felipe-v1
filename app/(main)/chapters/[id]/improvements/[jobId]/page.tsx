@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
+import { ProcessingScreen } from '@/components/processing-screen';
 import {
   Loader2,
   CheckCircle2,
@@ -71,21 +71,10 @@ export default function ChapterImprovementPage() {
   const [chapterTitle, setChapterTitle] = useState<string>('');
   const [references, setReferences] = useState<OperationReference[]>([]);
 
-  useEffect(() => {
-    loadJob();
-    loadChapterInfo();
-    loadReferences();
+  const jobRef = useRef<ImprovementJob | null>(null);
+  jobRef.current = job;
 
-    const interval = setInterval(() => {
-      if (job?.status === 'processing' || job?.status === 'pending') {
-        loadJob();
-      }
-    }, 3000); // Poll every 3s while processing
-
-    return () => clearInterval(interval);
-  }, [jobId, job?.status]);
-
-  const loadChapterInfo = async () => {
+  const loadChapterInfo = useCallback(async () => {
     try {
       const res = await fetch(`/api/chapters/${chapterId}`);
       if (res.ok) {
@@ -95,9 +84,9 @@ export default function ChapterImprovementPage() {
     } catch (error) {
       console.error('Failed to load chapter:', error);
     }
-  };
+  }, [chapterId]);
 
-  const loadJob = async () => {
+  const loadJob = useCallback(async () => {
     try {
       const res = await fetch(`/api/chapters/${chapterId}/operations/${jobId}`);
       if (!res.ok) throw new Error('Job não encontrado');
@@ -108,9 +97,9 @@ export default function ChapterImprovementPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [chapterId, jobId]);
 
-  const loadReferences = async () => {
+  const loadReferences = useCallback(async () => {
     try {
       const res = await fetch(`/api/chapters/${chapterId}/operations/${jobId}/references`);
       if (res.ok) {
@@ -120,9 +109,24 @@ export default function ChapterImprovementPage() {
       }
     } catch (error) {
       console.error('[IMPROVEMENT-PAGE] Failed to load references:', error);
-      // Don't show error to user - references are optional
     }
-  };
+  }, [chapterId, jobId]);
+
+  useEffect(() => {
+    void loadJob();
+    void loadChapterInfo();
+    void loadReferences();
+  }, [loadJob, loadChapterInfo, loadReferences]);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      const j = jobRef.current;
+      if (j?.status === 'processing' || j?.status === 'pending') {
+        void loadJob();
+      }
+    }, 3000);
+    return () => clearInterval(id);
+  }, [loadJob]);
 
   const viewNewVersion = () => {
     if (job?.newVersionId) {
@@ -153,45 +157,15 @@ export default function ChapterImprovementPage() {
   // Still processing
   if (job.status === 'processing' || job.status === 'pending') {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center gap-4">
-          <Link href={`/chapters/${chapterId}`}>
-            <Button variant="outline" size="icon">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </Link>
-          <div className="flex-1">
-            <h1 className="text-3xl font-bold">Analisando Capítulo</h1>
-            <p className="text-muted-foreground mt-1">{chapterTitle || 'Carregando...'}</p>
-          </div>
-        </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 animate-pulse" />
-              Análise em Progresso
-            </CardTitle>
-            <CardDescription>
-              A IA está analisando o capítulo para encontrar oportunidades de melhoria
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span>Processando...</span>
-                <span>{job.progress}%</span>
-              </div>
-              <Progress value={job.progress} />
-            </div>
-
-            <div className="p-4 bg-muted rounded-lg space-y-2">
-              <p className="text-sm font-medium">Operação:</p>
-              <p className="text-sm text-muted-foreground capitalize">{job.operation}</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      <ProcessingScreen
+        backHref={`/chapters/${chapterId}`}
+        backLabel="Voltar ao capítulo"
+        title="Melhorias em curso"
+        subtitle={chapterTitle || undefined}
+        percent={job.progress}
+        statusLine="A analisar o capítulo em busca de melhorias…"
+        icon={<Sparkles className="h-9 w-9 text-red-500 animate-pulse" />}
+      />
     );
   }
 

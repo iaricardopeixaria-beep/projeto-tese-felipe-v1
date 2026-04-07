@@ -1,13 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
+import { ProcessingScreen } from '@/components/processing-screen';
 import {
   Loader2,
   CheckCircle2,
@@ -123,18 +123,10 @@ export default function NormUpdatePage() {
   const [acceptedReferences, setAcceptedReferences] = useState<Set<string>>(new Set());
   const [applying, setApplying] = useState(false);
 
-  useEffect(() => {
-    loadJob();
-    const interval = setInterval(() => {
-      if (job?.status === 'analyzing' || job?.status === 'pending') {
-        loadJob();
-      }
-    }, 3000);
+  const jobRef = useRef<NormUpdateJob | null>(null);
+  jobRef.current = job;
 
-    return () => clearInterval(interval);
-  }, [jobId, job?.status]);
-
-  const loadJob = async () => {
+  const loadJob = useCallback(async () => {
     try {
       const res = await fetch(`/api/norms-update/${jobId}`);
       if (!res.ok) throw new Error('Job not found');
@@ -145,7 +137,21 @@ export default function NormUpdatePage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [jobId]);
+
+  useEffect(() => {
+    void loadJob();
+  }, [loadJob]);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      const j = jobRef.current;
+      if (j?.status === 'analyzing' || j?.status === 'pending') {
+        void loadJob();
+      }
+    }, 3000);
+    return () => clearInterval(id);
+  }, [loadJob]);
 
   const toggleReference = (refId: string) => {
     setAcceptedReferences(prev => {
@@ -281,42 +287,22 @@ export default function NormUpdatePage() {
   // Still analyzing
   if (job.status === 'analyzing' || job.status === 'pending') {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center gap-4">
-          <Link href={backHref}>
-            <Button variant="outline" size="icon">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </Link>
-          <div className="flex-1">
-            <h1 className="text-3xl font-bold">Analisando Normas</h1>
-            <p className="text-muted-foreground mt-1">Verificando referências normativas</p>
-          </div>
-        </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <RefreshCw className="h-5 w-5 animate-spin" />
-              Análise em Progresso
-            </CardTitle>
-            <CardDescription>
-              Verificando status de normas, leis e regulamentos
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span>Referência {job.progress.currentReference} de {job.progress.totalReferences}</span>
-                <span>{job.progress.percentage}%</span>
-              </div>
-              <Progress value={job.progress.percentage} />
-            </div>
-          </CardContent>
-        </Card>
-
+      <ProcessingScreen
+        backHref={backHref}
+        backLabel={backLabel}
+        title="Análise de normas em curso"
+        subtitle="A verificar referências normativas"
+        percent={job.progress.percentage}
+        statusLine="A consultar bases e a cruzar referências…"
+        detailLine={
+          job.progress.totalReferences > 0
+            ? `Referência ${job.progress.currentReference} de ${job.progress.totalReferences}`
+            : undefined
+        }
+        icon={<RefreshCw className="h-9 w-9 text-red-500 animate-spin" />}
+      >
         <ActivityLogPanel entries={job.activityLog ?? []} />
-      </div>
+      </ProcessingScreen>
     );
   }
 

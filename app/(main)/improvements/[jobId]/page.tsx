@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
+import { ProcessingScreen } from '@/components/processing-screen';
 import {
   Loader2,
   CheckCircle2,
@@ -61,18 +61,10 @@ export default function ImprovementPage() {
   const [acceptedSuggestions, setAcceptedSuggestions] = useState<Set<string>>(new Set());
   const [applying, setApplying] = useState(false);
 
-  useEffect(() => {
-    loadJob();
-    const interval = setInterval(() => {
-      if (job?.status === 'analyzing') {
-        loadJob();
-      }
-    }, 3000); // Poll every 3s while analyzing
+  const jobRef = useRef<ImprovementJob | null>(null);
+  jobRef.current = job;
 
-    return () => clearInterval(interval);
-  }, [jobId, job?.status]);
-
-  const loadJob = async () => {
+  const loadJob = useCallback(async () => {
     try {
       const res = await fetch(`/api/improve/${jobId}`);
       if (!res.ok) throw new Error('Job not found');
@@ -83,7 +75,21 @@ export default function ImprovementPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [jobId]);
+
+  useEffect(() => {
+    void loadJob();
+  }, [loadJob]);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      const j = jobRef.current;
+      if (j?.status === 'analyzing' || j?.status === 'pending') {
+        void loadJob();
+      }
+    }, 3000);
+    return () => clearInterval(id);
+  }, [loadJob]);
 
   const toggleSuggestion = (suggestionId: string) => {
     setAcceptedSuggestions(prev => {
@@ -204,52 +210,20 @@ export default function ImprovementPage() {
   // Still analyzing
   if (job.status === 'analyzing' || job.status === 'pending') {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center gap-4">
-          <Link href={`/documents/${job.documentId}`}>
-            <Button variant="outline" size="icon">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </Link>
-          <div className="flex-1">
-            <h1 className="text-3xl font-bold">Analisando Documento</h1>
-            <p className="text-muted-foreground mt-1">{job.globalContext?.title || 'Sem título'}</p>
-          </div>
-        </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 animate-pulse" />
-              Análise em Progresso
-            </CardTitle>
-            <CardDescription>
-              A IA está analisando o documento para encontrar oportunidades de melhoria
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span>Seção {job.progress.currentSection} de {job.progress.totalSections}</span>
-                <span>{job.progress.percentage}%</span>
-              </div>
-              <Progress value={job.progress.percentage} />
-            </div>
-
-            {job.globalContext && (
-              <div className="p-4 bg-muted rounded-lg space-y-2">
-                <p className="text-sm font-medium">Contexto Identificado:</p>
-                <p className="text-sm text-muted-foreground">{job.globalContext.theme}</p>
-                {job.globalContext.objective && (
-                  <p className="text-sm text-muted-foreground italic">
-                    Objetivo: {job.globalContext.objective}
-                  </p>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+      <ProcessingScreen
+        backHref={`/documents/${job.documentId}`}
+        backLabel="Voltar ao documento"
+        title="Análise em curso"
+        subtitle={job.globalContext?.title || undefined}
+        percent={job.progress.percentage}
+        statusLine="A analisar o documento em busca de melhorias…"
+        detailLine={
+          job.progress.totalSections > 0
+            ? `Parte ${job.progress.currentSection} de ${job.progress.totalSections}`
+            : undefined
+        }
+        icon={<Sparkles className="h-9 w-9 text-red-500 animate-pulse" />}
+      />
     );
   }
 

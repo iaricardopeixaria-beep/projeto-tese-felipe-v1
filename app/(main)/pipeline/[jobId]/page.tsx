@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
+import { ProcessingProgressBar } from '@/components/processing-screen';
 import { toast } from 'sonner';
 import {
   ArrowLeft,
@@ -270,7 +270,7 @@ export default function PipelinePage() {
             <span className="text-muted-foreground">Andamento geral</span>
             <span className="font-medium tabular-nums">{overallPct}%</span>
           </div>
-          <Progress value={overallPct} className="h-2.5" />
+          <ProcessingProgressBar value={overallPct} />
         </div>
       )}
 
@@ -347,7 +347,7 @@ export default function PipelinePage() {
                           <span>Nesta etapa</span>
                           <span className="tabular-nums">{currentOperationProgress.percentage}%</span>
                         </div>
-                        <Progress value={currentOperationProgress.percentage} className="h-2" />
+                        <ProcessingProgressBar value={currentOperationProgress.percentage} trackClassName="h-2" />
                         {currentOperationProgress.message && (
                           <p className="text-sm text-muted-foreground">{currentOperationProgress.message}</p>
                         )}

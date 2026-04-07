@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
+import { ProcessingScreen } from '@/components/processing-screen';
 import {
   Loader2,
   XCircle,
@@ -40,20 +40,10 @@ export default function ChapterAdjustPage() {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [fullText, setFullText] = useState<string>('');
 
-  useEffect(() => {
-    loadJob();
-    loadChapterInfo();
+  const jobRef = useRef<AdjustJob | null>(null);
+  jobRef.current = job;
 
-    const interval = setInterval(() => {
-      if (job?.status === 'processing' || job?.status === 'pending') {
-        loadJob();
-      }
-    }, 3000); // Poll every 3s while processing
-
-    return () => clearInterval(interval);
-  }, [jobId, job?.status]);
-
-  const loadChapterInfo = async () => {
+  const loadChapterInfo = useCallback(async () => {
     try {
       const res = await fetch(`/api/chapters/${chapterId}`);
       if (res.ok) {
@@ -63,27 +53,9 @@ export default function ChapterAdjustPage() {
     } catch (error) {
       console.error('Failed to load chapter:', error);
     }
-  };
+  }, [chapterId]);
 
-  const loadJob = async () => {
-    try {
-      const res = await fetch(`/api/chapters/${chapterId}/operations/${jobId}`);
-      if (!res.ok) throw new Error('Job não encontrado');
-      const data = await res.json();
-      setJob(data.job);
-
-      // If completed, load suggestions and full text
-      if (data.job.status === 'completed') {
-        await loadSuggestionsAndText();
-      }
-    } catch (error: any) {
-      toast.error(error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadSuggestionsAndText = async () => {
+  const loadSuggestionsAndText = useCallback(async () => {
     try {
       const res = await fetch(`/api/chapters/${chapterId}/operations/${jobId}/suggestions`);
       if (!res.ok) throw new Error('Falha ao carregar sugestões');
@@ -94,7 +66,39 @@ export default function ChapterAdjustPage() {
     } catch (error: any) {
       toast.error(error.message);
     }
-  };
+  }, [chapterId, jobId]);
+
+  const loadJob = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/chapters/${chapterId}/operations/${jobId}`);
+      if (!res.ok) throw new Error('Job não encontrado');
+      const data = await res.json();
+      setJob(data.job);
+
+      if (data.job.status === 'completed') {
+        await loadSuggestionsAndText();
+      }
+    } catch (error: any) {
+      toast.error(error.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [chapterId, jobId, loadSuggestionsAndText]);
+
+  useEffect(() => {
+    void loadJob();
+    void loadChapterInfo();
+  }, [loadJob, loadChapterInfo]);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      const j = jobRef.current;
+      if (j?.status === 'processing' || j?.status === 'pending') {
+        void loadJob();
+      }
+    }, 3000);
+    return () => clearInterval(id);
+  }, [loadJob]);
 
   const handleApply = async (acceptedIds: string[]) => {
     toast.loading('Aplicando ajustes selecionados...');
@@ -148,40 +152,15 @@ export default function ChapterAdjustPage() {
   // Still processing
   if (job.status === 'processing' || job.status === 'pending') {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center gap-4">
-          <Link href={`/chapters/${chapterId}`}>
-            <Button variant="outline" size="icon">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </Link>
-          <div className="flex-1">
-            <h1 className="text-3xl font-bold">Analisando Ajustes</h1>
-            <p className="text-muted-foreground mt-1">{chapterTitle || 'Carregando...'}</p>
-          </div>
-        </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Sliders className="h-5 w-5 animate-pulse" />
-              Análise em Progresso
-            </CardTitle>
-            <CardDescription>
-              A IA está analisando o documento e gerando ajustes conforme suas instruções
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span>Processando...</span>
-                <span>{job.progress}%</span>
-              </div>
-              <Progress value={job.progress} />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      <ProcessingScreen
+        backHref={`/chapters/${chapterId}`}
+        backLabel="Voltar ao capítulo"
+        title="Ajuste em curso"
+        subtitle={chapterTitle || undefined}
+        percent={job.progress}
+        statusLine="A analisar o texto e a gerar sugestões…"
+        icon={<Sliders className="h-9 w-9 text-red-500 animate-pulse" />}
+      />
     );
   }
 

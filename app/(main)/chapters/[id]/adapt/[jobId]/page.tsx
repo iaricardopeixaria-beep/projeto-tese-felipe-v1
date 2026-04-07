@@ -1,12 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
 import { toast } from 'sonner';
+import { ProcessingScreen } from '@/components/processing-screen';
 import {
   Loader2,
   CheckCircle2,
@@ -59,21 +59,10 @@ export default function ChapterAdaptPage() {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [fullText, setFullText] = useState<string>('');
 
-  useEffect(() => {
-    loadJob();
-    loadChapterInfo();
-    loadReferences();
+  const jobRef = useRef<AdaptJob | null>(null);
+  jobRef.current = job;
 
-    const interval = setInterval(() => {
-      if (job?.status === 'processing' || job?.status === 'pending') {
-        loadJob();
-      }
-    }, 3000); // Poll every 3s while processing
-
-    return () => clearInterval(interval);
-  }, [jobId, job?.status]);
-
-  const loadChapterInfo = async () => {
+  const loadChapterInfo = useCallback(async () => {
     try {
       const res = await fetch(`/api/chapters/${chapterId}`);
       if (res.ok) {
@@ -83,27 +72,9 @@ export default function ChapterAdaptPage() {
     } catch (error) {
       console.error('Failed to load chapter:', error);
     }
-  };
+  }, [chapterId]);
 
-  const loadJob = async () => {
-    try {
-      const res = await fetch(`/api/chapters/${chapterId}/operations/${jobId}`);
-      if (!res.ok) throw new Error('Job não encontrado');
-      const data = await res.json();
-      setJob(data.job);
-
-      // If completed, load suggestions and full text
-      if (data.job.status === 'completed') {
-        await loadSuggestionsAndText();
-      }
-    } catch (error: any) {
-      toast.error(error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadSuggestionsAndText = async () => {
+  const loadSuggestionsAndText = useCallback(async () => {
     try {
       const res = await fetch(`/api/chapters/${chapterId}/operations/${jobId}/suggestions`);
       if (!res.ok) throw new Error('Falha ao carregar sugestões');
@@ -114,9 +85,26 @@ export default function ChapterAdaptPage() {
     } catch (error: any) {
       toast.error(error.message);
     }
-  };
+  }, [chapterId, jobId]);
 
-  const loadReferences = async () => {
+  const loadJob = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/chapters/${chapterId}/operations/${jobId}`);
+      if (!res.ok) throw new Error('Job não encontrado');
+      const data = await res.json();
+      setJob(data.job);
+
+      if (data.job.status === 'completed') {
+        await loadSuggestionsAndText();
+      }
+    } catch (error: any) {
+      toast.error(error.message);
+    } finally {
+      setLoading(false);
+    }
+  }, [chapterId, jobId, loadSuggestionsAndText]);
+
+  const loadReferences = useCallback(async () => {
     try {
       const res = await fetch(`/api/chapters/${chapterId}/operations/${jobId}/references`);
       if (res.ok) {
@@ -126,9 +114,24 @@ export default function ChapterAdaptPage() {
       }
     } catch (error) {
       console.error('[ADAPT-PAGE] Failed to load references:', error);
-      // Don't show error to user - references are optional
     }
-  };
+  }, [chapterId, jobId]);
+
+  useEffect(() => {
+    void loadJob();
+    void loadChapterInfo();
+    void loadReferences();
+  }, [loadJob, loadChapterInfo, loadReferences]);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      const j = jobRef.current;
+      if (j?.status === 'processing' || j?.status === 'pending') {
+        void loadJob();
+      }
+    }, 3000);
+    return () => clearInterval(id);
+  }, [loadJob]);
 
   const handleApply = async (acceptedIds: string[]) => {
     toast.loading('Aplicando adaptações selecionadas...');
@@ -188,45 +191,15 @@ export default function ChapterAdaptPage() {
   // Still processing
   if (job.status === 'processing' || job.status === 'pending') {
     return (
-      <div className="space-y-6">
-        <div className="flex items-center gap-4">
-          <Link href={`/chapters/${chapterId}`}>
-            <Button variant="outline" size="icon">
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-          </Link>
-          <div className="flex-1">
-            <h1 className="text-3xl font-bold">Adaptando Capítulo</h1>
-            <p className="text-muted-foreground mt-1">{chapterTitle || 'Carregando...'}</p>
-          </div>
-        </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Wand2 className="h-5 w-5 animate-pulse" />
-              Adaptação em Progresso
-            </CardTitle>
-            <CardDescription>
-              A IA está adaptando o capítulo para o contexto ou formato desejado
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span>Processando...</span>
-                <span>{job.progress}%</span>
-              </div>
-              <Progress value={job.progress} />
-            </div>
-
-            <div className="p-4 bg-muted rounded-lg space-y-2">
-              <p className="text-sm font-medium">Operação:</p>
-              <p className="text-sm text-muted-foreground capitalize">{job.operation}</p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      <ProcessingScreen
+        backHref={`/chapters/${chapterId}`}
+        backLabel="Voltar ao capítulo"
+        title="Adaptação em curso"
+        subtitle={chapterTitle || undefined}
+        percent={job.progress}
+        statusLine="A adaptar o capítulo ao contexto pedido…"
+        icon={<Wand2 className="h-9 w-9 text-red-500 animate-pulse" />}
+      />
     );
   }
 
