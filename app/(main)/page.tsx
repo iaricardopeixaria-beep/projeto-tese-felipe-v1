@@ -1,13 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { NewProjectDialog } from '@/components/new-project-dialog';
 import { NewThesisDialog } from '@/components/thesis/new-thesis-dialog';
-import { FolderPlus, Folder, FileText, Sparkles, BookOpen, GraduationCap } from 'lucide-react';
+import { FolderPlus, Folder, FileText, Sparkles, BookOpen, GraduationCap, Search } from 'lucide-react';
 import Link from 'next/link';
 import { toast } from 'sonner';
 
@@ -27,6 +28,7 @@ type Thesis = {
   createdAt: string;
   updatedAt: string;
   chapterCount: number;
+  chapterTitles?: string[];
 };
 
 export default function HomePage() {
@@ -36,6 +38,31 @@ export default function HomePage() {
   const [activeTab, setActiveTab] = useState<'projects' | 'theses'>('theses');
   const [newProjectDialogOpen, setNewProjectDialogOpen] = useState(false);
   const [newThesisDialogOpen, setNewThesisDialogOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const searchNorm = searchQuery.trim().toLowerCase();
+  const hasActiveSearch = searchNorm.length > 0;
+
+  const filteredTheses = useMemo(() => {
+    if (!hasActiveSearch) return theses;
+    return theses.filter((t) => {
+      const inTitle = t.title.toLowerCase().includes(searchNorm);
+      const inDesc = (t.description || '').toLowerCase().includes(searchNorm);
+      const inChapters = (t.chapterTitles || []).some((ct) =>
+        ct.toLowerCase().includes(searchNorm)
+      );
+      return inTitle || inDesc || inChapters;
+    });
+  }, [theses, searchNorm, hasActiveSearch]);
+
+  const filteredProjects = useMemo(() => {
+    if (!hasActiveSearch) return projects;
+    return projects.filter((p) => {
+      const inName = p.name.toLowerCase().includes(searchNorm);
+      const inDesc = (p.description || '').toLowerCase().includes(searchNorm);
+      return inName || inDesc;
+    });
+  }, [projects, searchNorm, hasActiveSearch]);
 
   const loadProjects = async () => {
     try {
@@ -131,6 +158,20 @@ export default function HomePage() {
               </TabsTrigger>
             </TabsList>
 
+            <div className="relative max-w-lg">
+              <Search
+                className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500 pointer-events-none"
+                aria-hidden
+              />
+              <Input
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Pesquisar no separador ativo…"
+                aria-label="Pesquisar na dashboard"
+                className="h-10 pl-9 border-white/10 bg-white/5 text-white placeholder:text-gray-500 focus-visible:ring-red-500/40"
+              />
+            </div>
+
             {/* Theses Tab */}
             <TabsContent value="theses" className="space-y-4">
               {theses.length === 0 ? (
@@ -157,9 +198,30 @@ export default function HomePage() {
                     </Button>
                   </CardContent>
                 </Card>
+              ) : filteredTheses.length === 0 ? (
+                <Card className="relative bg-gradient-to-br from-white/5 to-white/[0.02] backdrop-blur-xl border-white/10">
+                  <CardContent className="flex flex-col items-center justify-center py-12 px-8 text-center">
+                    <p className="text-gray-300 mb-2">
+                      Nenhum resultado para «{searchQuery.trim()}»
+                    </p>
+                    <p className="text-gray-500 text-sm mb-6">
+                      Tente outro termo ou limpe a pesquisa.
+                    </p>
+                    <Button variant="outline" className="border-white/20" onClick={() => setSearchQuery('')}>
+                      Limpar pesquisa
+                    </Button>
+                  </CardContent>
+                </Card>
               ) : (
-                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                  {theses.map((thesis, index) => (
+                <div className="space-y-3">
+                  {hasActiveSearch && (
+                    <p className="text-sm text-gray-400">
+                      {filteredTheses.length}{' '}
+                      {filteredTheses.length === 1 ? 'resultado' : 'resultados'}
+                    </p>
+                  )}
+                  <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                  {filteredTheses.map((thesis, index) => (
                     <Link
                       key={thesis.id}
                       href={`/theses/${thesis.id}`}
@@ -200,6 +262,7 @@ export default function HomePage() {
                       </div>
                     </Link>
                   ))}
+                  </div>
                 </div>
               )}
             </TabsContent>
@@ -230,9 +293,30 @@ export default function HomePage() {
                     </Button>
                   </CardContent>
                 </Card>
+              ) : filteredProjects.length === 0 ? (
+                <Card className="relative bg-gradient-to-br from-white/5 to-white/[0.02] backdrop-blur-xl border-white/10">
+                  <CardContent className="flex flex-col items-center justify-center py-12 px-8 text-center">
+                    <p className="text-gray-300 mb-2">
+                      Nenhum resultado para «{searchQuery.trim()}»
+                    </p>
+                    <p className="text-gray-500 text-sm mb-6">
+                      Tente outro termo ou limpe a pesquisa.
+                    </p>
+                    <Button variant="outline" className="border-white/20" onClick={() => setSearchQuery('')}>
+                      Limpar pesquisa
+                    </Button>
+                  </CardContent>
+                </Card>
               ) : (
-                <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                  {projects.map((project, index) => (
+                <div className="space-y-3">
+                  {hasActiveSearch && (
+                    <p className="text-sm text-gray-400">
+                      {filteredProjects.length}{' '}
+                      {filteredProjects.length === 1 ? 'resultado' : 'resultados'}
+                    </p>
+                  )}
+                  <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+                  {filteredProjects.map((project, index) => (
                     <Link
                       key={project.id}
                       href={`/projects/${project.id}`}
@@ -273,6 +357,7 @@ export default function HomePage() {
                       </div>
                     </Link>
                   ))}
+                  </div>
                 </div>
               )}
             </TabsContent>

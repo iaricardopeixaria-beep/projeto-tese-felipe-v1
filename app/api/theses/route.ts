@@ -14,24 +14,37 @@ export async function GET() {
 
     if (error) throw error;
 
-    // For each thesis, count how many chapters it has
-    const thesesWithCounts = await Promise.all(
-      (theses || []).map(async (thesis) => {
-        const { count } = await supabase
-          .from('chapters')
-          .select('*', { count: 'exact', head: true })
-          .eq('thesis_id', thesis.id);
+    const list = theses || [];
+    const thesisIds = list.map((t) => t.id);
 
-        return {
-          id: thesis.id,
-          title: thesis.title,
-          description: thesis.description,
-          createdAt: thesis.created_at,
-          updatedAt: thesis.updated_at,
-          chapterCount: count || 0
-        };
-      })
-    );
+    const chapterTitlesByThesis: Record<string, string[]> = {};
+    if (thesisIds.length > 0) {
+      const { data: chapterRows, error: chError } = await supabase
+        .from('chapters')
+        .select('thesis_id, title')
+        .in('thesis_id', thesisIds);
+
+      if (chError) throw chError;
+
+      for (const row of chapterRows || []) {
+        const tid = row.thesis_id as string;
+        if (!chapterTitlesByThesis[tid]) chapterTitlesByThesis[tid] = [];
+        chapterTitlesByThesis[tid].push(String(row.title));
+      }
+    }
+
+    const thesesWithCounts = list.map((thesis) => {
+      const titles = chapterTitlesByThesis[thesis.id] || [];
+      return {
+        id: thesis.id,
+        title: thesis.title,
+        description: thesis.description,
+        createdAt: thesis.created_at,
+        updatedAt: thesis.updated_at,
+        chapterCount: titles.length,
+        chapterTitles: titles
+      };
+    });
 
     return NextResponse.json({ theses: thesesWithCounts });
   } catch (error: any) {
@@ -80,7 +93,8 @@ export async function POST(req: NextRequest) {
         description: thesis.description,
         createdAt: thesis.created_at,
         updatedAt: thesis.updated_at,
-        chapterCount: 0
+        chapterCount: 0,
+        chapterTitles: []
       }
     });
   } catch (error: any) {
