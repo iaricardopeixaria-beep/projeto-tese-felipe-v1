@@ -124,22 +124,7 @@ export default function MainLayout({
                 </div>
               </Link>
 
-              <Link
-                href="/settings"
-                className={`relative px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                  isActive("/settings")
-                    ? "text-white"
-                    : "text-gray-400 hover:text-white"
-                }`}
-              >
-                {isActive("/settings") && (
-                  <div className="absolute inset-0 bg-gradient-to-r from-red-500/20 to-red-600/10 rounded-lg border border-red-500/20"></div>
-                )}
-                <div className="relative flex items-center gap-2">
-                  <Settings className="h-4 w-4" />
-                  <span className="hidden sm:inline">Configurações</span>
-                </div>
-              </Link>
+              
 
               <div className="ml-2 pl-2 border-l border-white/10">
                 <UserMenu />
