@@ -28,7 +28,6 @@ import { ReferenceManager, type ReferenceItem } from '@/components/thesis/refere
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { ExpandableTextarea } from '@/components/expandable-textarea';
 import { Checkbox } from '@/components/ui/checkbox';
-import { ContextSelector } from '@/components/thesis/context-selector';
 import {
   ChapterOperationAiFields,
   type ChapterOpAIProvider,
@@ -62,8 +61,6 @@ export default function ChapterVersionPage() {
   const [version, setVersion] = useState<ChapterVersion | null>(null);
   const [allVersions, setAllVersions] = useState<ChapterVersion[]>([]);
   const [loading, setLoading] = useState(true);
-  const [allChapters, setAllChapters] = useState<any[]>([]);
-  const [contextVersionIds, setContextVersionIds] = useState<string[]>([]);
 
   const [settingsModels, setSettingsModels] = useState<
     Partial<Record<ChapterOpAIProvider, string[]>> | null
@@ -129,30 +126,6 @@ export default function ChapterVersionPage() {
         foundVersion.chapterOrder = chapterData.chapter.chapterOrder;
         foundVersion.thesisTitle = chapterData.chapter.thesisTitle;
         foundVersion.thesisId = chapterData.chapter.thesisId;
-
-        // Load all chapters from thesis for context selection
-        if (chapterData.chapter.thesisId) {
-          const thesisRes = await fetch(`/api/theses/${chapterData.chapter.thesisId}`);
-          if (thesisRes.ok) {
-            const thesisData = await thesisRes.json();
-            const chaptersWithVersions = await Promise.all(
-              (thesisData.chapters || []).map(async (ch: any) => {
-                const vRes = await fetch(`/api/chapters/${ch.id}/versions`);
-                if (vRes.ok) {
-                  const vData = await vRes.json();
-                  return {
-                    id: ch.id,
-                    title: ch.title,
-                    chapterOrder: ch.chapterOrder,
-                    versions: vData.versions || []
-                  };
-                }
-                return null;
-              })
-            );
-            setAllChapters(chaptersWithVersions.filter(Boolean));
-          }
-        }
       }
 
       setVersion(foundVersion);
@@ -320,7 +293,7 @@ export default function ChapterVersionPage() {
           model: adjustModel,
           useGrounding: adjustUseGrounding,
           references: referencesForAPI,
-          contextVersionIds
+          contextVersionIds: []
         })
       });
 
@@ -378,7 +351,7 @@ export default function ChapterVersionPage() {
           provider: adaptProvider,
           model: adaptModel,
           references: referencesForAPI,
-          contextVersionIds
+          contextVersionIds: []
         })
       });
 
@@ -785,14 +758,6 @@ export default function ChapterVersionPage() {
                 </div>
                 <ScrollArea className="max-h-[60vh] pr-4">
                   <div className="space-y-4 py-4">
-                    {allChapters.length > 0 && (
-                      <ContextSelector
-                        chapters={allChapters}
-                        currentChapterId={chapterId}
-                        selectedVersionIds={contextVersionIds}
-                        onSelectionChange={setContextVersionIds}
-                      />
-                    )}
                     <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
                       <div className="flex items-start gap-2">
                         <Info className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
@@ -948,14 +913,6 @@ export default function ChapterVersionPage() {
                 </div>
                 <ScrollArea className="max-h-[60vh] pr-4">
                   <div className="space-y-4 py-4">
-                    {allChapters.length > 0 && (
-                      <ContextSelector
-                        chapters={allChapters}
-                        currentChapterId={chapterId}
-                        selectedVersionIds={contextVersionIds}
-                        onSelectionChange={setContextVersionIds}
-                      />
-                    )}
                     <div className="space-y-2">
                       <Label htmlFor="adapt-style">Estilo de Adaptação *</Label>
                       <p className="text-sm text-muted-foreground">

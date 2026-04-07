@@ -10,8 +10,6 @@ import { toast } from 'sonner';
 import Link from 'next/link';
 import { ChapterChat } from '@/components/thesis/chapter-chat';
 import { VersionHistory } from '@/components/thesis/version-history';
-import { ContextSelector } from '@/components/thesis/context-selector';
-
 type ChapterVersion = {
   id: string;
   versionNumber: number;
@@ -46,7 +44,6 @@ export default function ChapterPage() {
   const [versions, setVersions] = useState<ChapterVersion[]>([]);
   const [allChapters, setAllChapters] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [contextVersionIds, setContextVersionIds] = useState<string[]>([]);
 
   const loadChapter = async () => {
     try {
@@ -242,16 +239,6 @@ export default function ChapterPage() {
           <VersionHistory
             versions={versions}
             chapterId={chapterId}
-          />
-        )}
-
-        {/* Context Selector for Operations */}
-        {allChapters.length > 0 && (
-          <ContextSelector
-            chapters={allChapters}
-            currentChapterId={chapterId}
-            selectedVersionIds={contextVersionIds}
-            onSelectionChange={setContextVersionIds}
           />
         )}
 
