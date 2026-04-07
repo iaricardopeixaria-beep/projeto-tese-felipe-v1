@@ -1,5 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { jsonNoStore } from '@/lib/json-no-store-response';
+
+export const dynamic = 'force-dynamic';
 
 /**
  * GET /api/adjust/[id] - Get adjust job status
@@ -18,13 +21,10 @@ export async function GET(
       .single();
 
     if (error || !job) {
-      return NextResponse.json(
-        { error: 'Job not found' },
-        { status: 404 }
-      );
+      return jsonNoStore({ error: 'Job not found' }, { status: 404 });
     }
 
-    return NextResponse.json({
+    return jsonNoStore({
       jobId: job.id,
       documentId: job.document_id,
       status: job.status,
@@ -45,12 +45,8 @@ export async function GET(
       startedAt: job.started_at,
       completedAt: job.completed_at
     });
-
   } catch (error: any) {
     console.error('[ADJUST] Error:', error);
-    return NextResponse.json(
-      { error: error.message },
-      { status: 500 }
-    );
+    return jsonNoStore({ error: error.message }, { status: 500 });
   }
 }
