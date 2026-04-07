@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback } from 'react';
+import type { LucideIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -12,16 +13,33 @@ import {
   DialogHeader,
   DialogTitle
 } from '@/components/ui/dialog';
-import { Download, Loader2 } from 'lucide-react';
+import { Download, Loader2, Languages, Sliders, Wand2, SearchCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { getAIErrorMessage } from '@/lib/ai-error-message';
 import { PipelineOperation, OPERATION_METADATA } from '@/lib/pipeline/types';
 import {
-  PIPELINE_OPERATIONS,
   OperationStepContent,
   validateConfig,
   buildNormalizedConfigs
 } from '@/components/pipeline-operation-forms';
+
+/** Igual ao cartão Ações em capítulos (versão): sem Sugerir melhorias (`improve`). */
+const DOCUMENT_ACTION_OPERATIONS: PipelineOperation[] = [
+  'translate',
+  'adjust',
+  'adapt',
+  'update'
+];
+
+const ACTION_BUTTON: Record<
+  (typeof DOCUMENT_ACTION_OPERATIONS)[number],
+  { label: string; Icon: LucideIcon }
+> = {
+  translate: { label: 'Traduzir', Icon: Languages },
+  adjust: { label: 'Ajuste livre', Icon: Sliders },
+  adapt: { label: 'Adaptar texto', Icon: Wand2 },
+  update: { label: 'Revisar leis', Icon: SearchCheck }
+};
 
 function initialConfigForOperation(op: PipelineOperation): Record<string, unknown> {
   if (op === 'adapt') return { style: 'simplified' };
@@ -115,7 +133,7 @@ export function DocumentActionsCard({ documentId, documentTitle }: DocumentActio
 
   return (
     <>
-      <Card>
+      <Card className="bg-gradient-to-br from-white/[0.07] to-white/[0.02] backdrop-blur-xl border-white/10">
         <CardHeader>
           <CardTitle className="text-lg">Ações</CardTitle>
           <CardDescription>
@@ -134,10 +152,10 @@ export function DocumentActionsCard({ documentId, documentTitle }: DocumentActio
             ) : (
               <Download className="h-4 w-4 mr-2 shrink-0" />
             )}
-            Fazer download
+            Fazer Download
           </Button>
-          {PIPELINE_OPERATIONS.map((op) => {
-            const meta = OPERATION_METADATA[op];
+          {DOCUMENT_ACTION_OPERATIONS.map((op) => {
+            const { label, Icon } = ACTION_BUTTON[op];
             return (
               <Button
                 key={op}
@@ -145,16 +163,17 @@ export function DocumentActionsCard({ documentId, documentTitle }: DocumentActio
                 className="w-full justify-start"
                 onClick={() => openDialog(op)}
               >
-                <span className="mr-2 shrink-0">{meta.icon}</span>
-                {meta.name}
+                <Icon className="h-4 w-4 mr-2 shrink-0" />
+                {label}
               </Button>
             );
           })}
         </CardContent>
       </Card>
 
-      {PIPELINE_OPERATIONS.map((op) => {
+      {DOCUMENT_ACTION_OPERATIONS.map((op) => {
         const meta = OPERATION_METADATA[op];
+        const { label, Icon } = ACTION_BUTTON[op];
         const starting = startingOp === op;
         return (
           <Dialog
@@ -166,8 +185,9 @@ export function DocumentActionsCard({ documentId, documentTitle }: DocumentActio
           >
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
-                <DialogTitle className="text-xl">
-                  {meta.icon} {meta.name}
+                <DialogTitle className="text-xl flex items-center gap-2">
+                  <Icon className="h-5 w-5 shrink-0" />
+                  {label}
                 </DialogTitle>
                 <DialogDescription>{meta.description}</DialogDescription>
               </DialogHeader>
