@@ -12,8 +12,7 @@ import { appendNormJobLog } from '@/lib/norms-update/job-log';
 
 /**
  * POST /api/chapters/[chapterId]/versions/[versionId]/norms-update
- * Inicia análise de normas para um capítulo. document_id no job usa o versionId (UUID)
- * para compatibilidade com a coluna UUID; o apply detecta capítulo via chapter_versions.
+ * Inicia análise de normas para um capítulo (chapter_version_id → chapter_versions).
  */
 export async function POST(
   req: NextRequest,
@@ -55,12 +54,12 @@ export async function POST(
     await fs.writeFile(tempFilePath, Buffer.from(await fileBlob.arrayBuffer()));
 
     const jobId = randomUUID();
-    // document_id é UUID: usamos versionId; o apply detecta capítulo consultando chapter_versions
     const { error: insertError } = await supabase
       .from('norm_update_jobs')
       .insert({
         id: jobId,
-        document_id: versionId,
+        chapter_version_id: versionId,
+        document_id: null,
         status: 'pending',
         norm_references: [],
         total_references: 0,

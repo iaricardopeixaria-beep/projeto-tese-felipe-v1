@@ -31,7 +31,7 @@ type ActivityLogEntry = {
 
 type NormUpdateJob = {
   jobId: string;
-  documentId: string;
+  documentId: string | null;
   source?: 'document' | 'chapter';
   chapterId?: string;
   versionId?: string;
@@ -273,7 +273,9 @@ export default function NormUpdatePage() {
   const isChapterJob = job.source === 'chapter' && job.chapterId && job.versionId;
   const backHref = isChapterJob
     ? `/chapters/${job.chapterId}/versions/${job.versionId}`
-    : `/documents/${job.documentId}`;
+    : job.documentId
+      ? `/documents/${job.documentId}`
+      : '/';
   const backLabel = isChapterJob ? 'Voltar ao capítulo' : 'Voltar ao documento';
 
   // Still analyzing

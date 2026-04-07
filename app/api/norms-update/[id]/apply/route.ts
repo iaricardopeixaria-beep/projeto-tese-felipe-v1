@@ -43,12 +43,23 @@ export async function POST(
 
     console.log(`[NORMS-APPLY] Applying ${acceptedReferences.length} updates`);
 
-    // Job de capítulo: document_id é o versionId; detectamos consultando chapter_versions
-    const { data: chapterVersion } = await supabase
-      .from('chapter_versions')
-      .select('id, file_path, chapter_id')
-      .eq('id', job.document_id)
-      .single();
+    let chapterVersionId: string | null = job.chapter_version_id ?? null;
+    if (!chapterVersionId && job.document_id) {
+      const { data: row } = await supabase
+        .from('chapter_versions')
+        .select('id')
+        .eq('id', job.document_id)
+        .maybeSingle();
+      if (row) chapterVersionId = row.id;
+    }
+
+    const { data: chapterVersion } = chapterVersionId
+      ? await supabase
+          .from('chapter_versions')
+          .select('id, file_path, chapter_id')
+          .eq('id', chapterVersionId)
+          .single()
+      : { data: null };
 
     if (chapterVersion) {
       const chapterId = chapterVersion.chapter_id;
@@ -122,6 +133,13 @@ export async function POST(
     }
 
     // Fluxo documento (projeto)
+    if (!job.document_id) {
+      return NextResponse.json(
+        { error: 'Job has no linked document or chapter version' },
+        { status: 400 }
+      );
+    }
+
     const { data: doc, error: docError } = await supabase
       .from('documents')
       .select('*')
