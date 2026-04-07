@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { PipelineStatusResponse, PipelineOperation } from '@/lib/pipeline/types';
+import { jsonNoStore } from '@/lib/json-no-store-response';
+
+export const dynamic = 'force-dynamic';
 
 /**
  * Find the most recent running job ID for a given operation and document
@@ -196,10 +199,7 @@ export async function GET(
       .single();
 
     if (jobError || !job) {
-      return NextResponse.json(
-        { error: 'Pipeline job not found' },
-        { status: 404 }
-      );
+      return jsonNoStore({ error: 'Pipeline job not found' }, { status: 404 });
     }
 
     // Load intermediate documents
@@ -260,14 +260,10 @@ export async function GET(
       currentOperationProgress
     };
 
-    return NextResponse.json(response);
-
+    return jsonNoStore(response);
   } catch (error: any) {
     console.error('[PIPELINE] Error:', error);
-    return NextResponse.json(
-      { error: error.message },
-      { status: 500 }
-    );
+    return jsonNoStore({ error: error.message }, { status: 500 });
   }
 }
 

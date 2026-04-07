@@ -1,5 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { jsonNoStore } from '@/lib/json-no-store-response';
+
+export const dynamic = 'force-dynamic';
 
 // GET /api/norms-update/[id] - Busca status do job
 export async function GET(
@@ -16,10 +19,7 @@ export async function GET(
       .single();
 
     if (error || !job) {
-      return NextResponse.json(
-        { error: 'Job not found' },
-        { status: 404 }
-      );
+      return jsonNoStore({ error: 'Job not found' }, { status: 404 });
     }
 
     let source: 'document' | 'chapter' = 'document';
@@ -50,7 +50,7 @@ export async function GET(
     // Formata resposta
     const activityLog = Array.isArray(job.activity_log) ? job.activity_log : [];
 
-    return NextResponse.json({
+    return jsonNoStore({
       jobId: job.id,
       documentId: job.document_id,
       source,
@@ -76,12 +76,8 @@ export async function GET(
       startedAt: job.started_at,
       completedAt: job.completed_at
     });
-
   } catch (error: any) {
     console.error('[NORMS] Error fetching job:', error);
-    return NextResponse.json(
-      { error: error.message },
-      { status: 500 }
-    );
+    return jsonNoStore({ error: error.message }, { status: 500 });
   }
 }

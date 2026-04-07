@@ -66,7 +66,7 @@ export default function ImprovementPage() {
 
   const loadJob = useCallback(async () => {
     try {
-      const res = await fetch(`/api/improve/${jobId}`);
+      const res = await fetch(`/api/improve/${jobId}`, { cache: 'no-store' });
       if (!res.ok) throw new Error('Job not found');
       const data = await res.json();
       setJob(data);

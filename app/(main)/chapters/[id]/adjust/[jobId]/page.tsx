@@ -70,7 +70,9 @@ export default function ChapterAdjustPage() {
 
   const loadJob = useCallback(async () => {
     try {
-      const res = await fetch(`/api/chapters/${chapterId}/operations/${jobId}`);
+      const res = await fetch(`/api/chapters/${chapterId}/operations/${jobId}`, {
+        cache: 'no-store'
+      });
       if (!res.ok) throw new Error('Job não encontrado');
       const data = await res.json();
       setJob(data.job);

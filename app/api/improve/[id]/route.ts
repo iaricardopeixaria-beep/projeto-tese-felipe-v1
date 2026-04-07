@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { jsonNoStore } from '@/lib/json-no-store-response';
+
+export const dynamic = 'force-dynamic';
 import { extractDocumentStructure, generateGlobalContext } from '@/lib/improvement/document-analyzer';
 import { analyzeSectionForImprovements } from '@/lib/improvement/section-analyzer';
 import fs from 'fs/promises';
@@ -80,13 +83,10 @@ export async function GET(
       .single();
 
     if (error || !job) {
-      return NextResponse.json(
-        { error: 'Job not found' },
-        { status: 404 }
-      );
+      return jsonNoStore({ error: 'Job not found' }, { status: 404 });
     }
 
-    return NextResponse.json({
+    return jsonNoStore({
       jobId: job.id,
       documentId: job.document_id,
       status: job.status,
@@ -101,13 +101,9 @@ export async function GET(
       createdAt: job.created_at,
       completedAt: job.completed_at
     });
-
   } catch (error: any) {
     console.error('[IMPROVE] Error:', error);
-    return NextResponse.json(
-      { error: error.message },
-      { status: 500 }
-    );
+    return jsonNoStore({ error: error.message }, { status: 500 });
   }
 }
 

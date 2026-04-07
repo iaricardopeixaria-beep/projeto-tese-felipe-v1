@@ -128,7 +128,7 @@ export default function NormUpdatePage() {
 
   const loadJob = useCallback(async () => {
     try {
-      const res = await fetch(`/api/norms-update/${jobId}`);
+      const res = await fetch(`/api/norms-update/${jobId}`, { cache: 'no-store' });
       if (!res.ok) throw new Error('Job not found');
       const data = await res.json();
       setJob(data);

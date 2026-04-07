@@ -92,7 +92,7 @@ export default function TranslationViewPage() {
 
   const fetchJob = useCallback(async () => {
     try {
-      const res = await fetch(`/api/translate/${jobId}`);
+      const res = await fetch(`/api/translate/${jobId}`, { cache: 'no-store' });
       if (!res.ok) throw new Error('Não foi possível carregar o trabalho de tradução');
 
       const data = await res.json();

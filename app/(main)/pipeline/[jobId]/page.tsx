@@ -65,7 +65,7 @@ export default function PipelinePage() {
 
   const loadPipelineStatus = useCallback(async () => {
     try {
-      const res = await fetch(`/api/pipeline/${jobId}`);
+      const res = await fetch(`/api/pipeline/${jobId}`, { cache: 'no-store' });
       if (!res.ok) {
         throw new Error('Pipeline não encontrado');
       }

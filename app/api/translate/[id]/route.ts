@@ -3,6 +3,9 @@ import { SupportedLanguage } from '@/lib/translation/types';
 import { AIProvider } from '@/lib/ai/types';
 import { supabase } from '@/lib/supabase';
 import { createTranslationJob, executeTranslation } from '@/lib/translation/run-translation';
+import { jsonNoStore } from '@/lib/json-no-store-response';
+
+export const dynamic = 'force-dynamic';
 
 // POST /api/translate/[id] - Inicia tradução
 export async function POST(
@@ -110,13 +113,10 @@ export async function GET(
       .single();
 
     if (error || !job) {
-      return NextResponse.json(
-        { error: 'Translation job not found' },
-        { status: 404 }
-      );
+      return jsonNoStore({ error: 'Translation job not found' }, { status: 404 });
     }
 
-    return NextResponse.json({
+    return jsonNoStore({
       jobId: job.id,
       documentId: job.document_id,
       status: job.status,
@@ -137,12 +137,8 @@ export async function GET(
       startedAt: job.started_at,
       completedAt: job.completed_at
     });
-
   } catch (error: any) {
     console.error('Status check error:', error);
-    return NextResponse.json(
-      { error: error.message },
-      { status: 500 }
-    );
+    return jsonNoStore({ error: error.message }, { status: 500 });
   }
 }
