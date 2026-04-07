@@ -166,7 +166,7 @@ export default function HomePage() {
               <Input
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Pesquisar no separador ativo…"
+                placeholder="Pesquisar"
                 aria-label="Pesquisar na dashboard"
                 className="h-10 pl-9 border-white/10 bg-white/5 text-white placeholder:text-gray-500 focus-visible:ring-red-500/40"
               />
