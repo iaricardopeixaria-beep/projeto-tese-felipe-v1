@@ -9,8 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { AnswerCompareGrid } from '@/components/answer-compare-grid';
-import { PipelineWizard } from '@/components/pipeline-wizard';
-import { UpdateNormsButton } from '@/components/update-norms-button';
+import { DocumentActionsCard } from '@/components/document-actions-card';
 import { toast } from 'sonner';
 import {
   FileText,
@@ -53,8 +52,6 @@ export default function DocumentPage() {
   const [chatting, setChatting] = useState(false);
   const [answers, setAnswers] = useState<AIResponse[]>([]);
   const [translations, setTranslations] = useState<any[]>([]);
-  const [pipelineSelectorOpen, setPipelineSelectorOpen] = useState(false);
-
   const [settings, setSettings] = useState<any>(null);
   const [selectedProvider, setSelectedProvider] = useState<'openai' | 'gemini' | 'grok' | 'anthropic'>('openai');
   const [selectedModels, setSelectedModels] = useState({
@@ -263,17 +260,9 @@ export default function DocumentPage() {
             <Badge variant="secondary">{document.chunksCount} chunks</Badge>
           </div>
         </div>
-        <div className="flex gap-2">
-          <UpdateNormsButton documentId={documentId} documentTitle={document.title} />
-          <Button
-            onClick={() => setPipelineSelectorOpen(true)}
-            className="bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800 text-white shadow-lg shadow-red-500/20"
-          >
-            <Sparkles className="h-4 w-4 mr-2" />
-            Processar Documento
-          </Button>
-        </div>
       </div>
+
+      <DocumentActionsCard documentId={documentId} documentTitle={document.title} />
 
       {(translations.length > 0 || pipelineJobs.length > 0 || normJobs.length > 0) && (
         <Card>
@@ -506,12 +495,6 @@ export default function DocumentPage() {
         </div>
       )}
 
-      <PipelineWizard
-        documentId={documentId}
-        documentTitle={document.title}
-        open={pipelineSelectorOpen}
-        onOpenChange={setPipelineSelectorOpen}
-      />
     </div>
   );
 }
